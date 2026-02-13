@@ -1,6 +1,6 @@
-*Copyright (c) 2016–2020 Johan Berglund*
+*Copyright (c) 2016–2026 Johan Berglund*
 
-*FWQPBO is distributed under the terms of the GNU General Public License*
+*mri-fatwater is distributed under the terms of the GNU General Public License*
 
 *This program is free software: you can redistribute it and/or modify*
 *it under the terms of the GNU General Public License as published by*
@@ -17,14 +17,17 @@
 
 ABOUT
 -------------------------------------------------------------------------------
-FWQPBO is a command-line tool for MRI [chemical shift based fat-water 
+mri-fatwater is a command-line tool for MRI [chemical shift based fat-water 
 separation with B0-correction based on QPBO graph cuts
 ](https://onlinelibrary.wiley.com/doi/abs/10.1002/mrm.26479). 
 Input paramaters are provided by human readable configuration files. 
-See example configuration files provided with FWQPBO for details. 
+See example configuration files provided with mri-fatwater for details. 
 Input data can be in DICOM format, or [MATLAB format according to the 
 ISMRM 2012 challenge](http://challenge.ismrm.org/node/14).
-FWQPBO is written in Python.
+mri-fatwater is written in Python.
+
+⚠️ This repository was previously named `fwqpbo`.
+The repository was renamed for clarity. Existing links remain valid.
 
 HOW TO USE
 -------------------------------------------------------------------------------
@@ -49,7 +52,6 @@ See [./environment.yml](environment.yml)
 CONTACT INFORMATION
 -------------------------------------------------------------------------------
 Johan Berglund, Ph.D.  
-Dept. of Clinical Neuroscience  
-Karolinska Institutet,  
-Stockholm, Sweden  
-johan.berglund@ki.se  
+Uppsala University Hospital,  
+Uppsala, Sweden  
+johan.berglund@akademiska.se
