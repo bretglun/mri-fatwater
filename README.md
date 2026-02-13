@@ -34,11 +34,11 @@ HOW TO USE
 First install required packages, see dependencies.
 To use the command-line tool, type 
 ```
-./main.py -h.
+python mri_fatwater/cli.py -h
 ```
-To use as a Python script, see example file [./demo.py](demo.py). The demo
-reconstructs [data from the ISMRM 2012 challenge (data download required)
-](http://challenge.ismrm.org/node/4).
+To use as a Python script, see example file [./scripts/demo.py](scripts/demo.py). 
+The demo reconstructs [data from the ISMRM 2012 challenge](
+http://challenge.ismrm.org/node/4) (data download required).
 
 HOW TO CITE
 -------------------------------------------------------------------------------

@@ -1,9 +1,7 @@
-import configparser
-import DICOM
-import MATLAB
 import numpy as np
 from pathlib import Path
 import yaml
+from mri_fatwater import DICOM, MATLAB
 
 
 # extract data parameter object representing a single slice

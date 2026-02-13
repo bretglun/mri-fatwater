@@ -1,12 +1,6 @@
-#!/usr/bin/env python3
-
 import numpy as np
 import sys
-import optparse
-import config
-import fatWaterSeparation
-import DICOM
-import MATLAB
+from mri_fatwater import algorithm, config, DICOM, MATLAB
 
 
 gyro = 42.58  # 1H gyromagnetic ratio
@@ -83,7 +77,7 @@ def getFat(rho, alpha):
 def reconstruct(dPar, aPar, mPar):
 
     # Do the fat/water separation
-    rho, B0map, R2map = fatWaterSeparation.reconstruct(dPar, aPar, mPar)
+    rho, B0map, R2map = algorithm.reconstruct(dPar, aPar, mPar)
     wat = rho[0]
     fat = getFat(rho, mPar['alpha'])
 
@@ -111,7 +105,7 @@ def reconstruct(dPar, aPar, mPar):
 
     # Do any Fatty Acid Composition in a second pass
     if mPar['nFAC'] > 0:
-        rho = fatWaterSeparation.reconstruct(dPar, aPar['pass2'], mPar['pass2'], B0map, R2map)[0]
+        rho = algorithm.reconstruct(dPar, aPar['pass2'], mPar['pass2'], B0map, R2map)[0]
         CL, UD, PUD = getFattyAcidComposition(rho)
     
         if 'CL' in aPar['output']:
@@ -124,7 +118,7 @@ def reconstruct(dPar, aPar, mPar):
     return output
 
 
-def main(dataParamFile, algoParamFile, modelParamFile, outDir=None):
+def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     # Read configuration files
     dPar = config.readConfig(dataParamFile, 'data parameters')
     aPar = config.readConfig(algoParamFile, 'algorithm parameters')
@@ -163,19 +157,3 @@ def main(dataParamFile, algoParamFile, modelParamFile, outDir=None):
             sliceDataParams = config.getSliceDataParams(dPar, slice, z)
             output.append(reconstruct(sliceDataParams, aPar, mPar))
         save(mergeOutputSlices(output), dPar)
-
-
-if __name__ == '__main__':
-    # Initiate command line parser
-    p = optparse.OptionParser()
-    p.add_option('--dataParamFile', '-d', default='',  type="string",
-                 help="File path of data parameter configuration file")
-    p.add_option('--algoParamFile', '-a', default='',  type="string",
-                 help="File path of algorithm parameter configuration file")
-    p.add_option('--modelParamFile', '-m', default='',  type="string",
-                 help="File path of model parameter configuration file")
-
-    # Parse command line
-    options, arguments = p.parse_args()
-
-    main(options.dataParamFile, options.algoParamFile, options.modelParamFile)
