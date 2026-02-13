@@ -1,9 +1,6 @@
 import numpy as np
-import sys
 from mri_fatwater import algorithm, config, DICOM, MATLAB
-
-
-gyro = 42.58  # 1H gyromagnetic ratio
+from .constants import EPSILON
 
 
 # Zero pad back any cropped FOV
@@ -41,24 +38,23 @@ def mergeOutputSlices(outputList):
 
 def getFattyAcidComposition(rho):
     nFAC = len(rho) - 2 # Number of Fatty Acid Composition Parameters
-    eps = sys.float_info.epsilon
     CL, UD, PUD = None, None, None
 
     if nFAC == 1:
         # UD = F2/F1
-        UD = np.abs(rho[2] / (rho[1] + eps))
+        UD = np.abs(rho[2] / (rho[1] + EPSILON))
     elif nFAC == 2:
         # UD = F2/F1
         # PUD = F3/F1
-        UD = np.abs(rho[2] / (rho[1] + eps))
-        PUD = np.abs(rho[3] / (rho[1] + eps))
+        UD = np.abs(rho[2] / (rho[1] + EPSILON))
+        PUD = np.abs(rho[3] / (rho[1] + EPSILON))
     elif nFAC == 3:
         # UD = F2/F1
         # PUD = F3/F1
         # CL = F4/F1
-        UD = np.abs(rho[2] / (rho[1] + eps))
-        PUD = np.abs(rho[3] / (rho[1] + eps))
-        CL = np.abs(rho[4] / (rho[1] + eps))
+        UD = np.abs(rho[2] / (rho[1] + EPSILON))
+        PUD = np.abs(rho[3] / (rho[1] + EPSILON))
+        CL = np.abs(rho[4] / (rho[1] + EPSILON))
     else:
         raise Exception('Unknown number of Fatty Acid Composition parameters: {}'.format(nFAC))
 
@@ -95,9 +91,9 @@ def reconstruct(dPar, aPar, mPar):
         output['op'] = np.abs(wat-fat)
     if 'ff' in aPar['output']: # Calculate the fat fraction
         if aPar['magnitudeDiscrimination']:  # to avoid bias from noise
-            output['ff'] = 100 * np.real(fat / (wat + fat + sys.float_info.epsilon))
+            output['ff'] = 100 * np.real(fat / (wat + fat + EPSILON))
         else:
-            output['ff'] = 100 * np.abs(fat)/(np.abs(wat) + np.abs(fat) + sys.float_info.epsilon)
+            output['ff'] = 100 * np.abs(fat)/(np.abs(wat) + np.abs(fat) + EPSILON)
     if 'B0map' in aPar['output']:
         output['B0map'] = B0map
     if 'R2map' in aPar['output']:

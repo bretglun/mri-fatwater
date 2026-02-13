@@ -1,9 +1,7 @@
 import pydicom
 import datetime
 import numpy as np
-
-
-gyro = 42.58  # 1H gyromagnetic ratio
+from .constants import GYRO
 
 
 # Dictionary of DICOM tags
@@ -227,7 +225,7 @@ def updateDataParams(dPar, files):
     dPar['dy'] = float(frameList[0][8][0])
     dPar['dz'] = float(frameList[0][9])
 
-    dPar['B0'] = frameList[0][5]/gyro
+    dPar['B0'] = frameList[0][5]/GYRO
     # [msec]->[sec]
     echoTimes = sorted(set([float(tags[3])/1000. for tags in frameList]))
     dPar['totalN'] = len(echoTimes)

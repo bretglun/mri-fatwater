@@ -1,8 +1,7 @@
 import thinqpbo as tq
 import numpy as np
 from skimage.filters import threshold_otsu
-
-gyro = 42.576
+from .constants import GYRO
 
 
 def QPBO(D, Vx, Vy, Vz):
@@ -95,7 +94,6 @@ def findMinima(f): return np.where((f < np.roll(f, 1))*(f < np.roll(f, -1)))[0]
 
 # In each voxel, find two smallest local residual minima in a period of omega
 def findTwoSmallestMinima(J):
-    nVxl = J.shape[1] * J.shape[2] * J.shape[3]
     A = np.zeros(J.shape[1:], dtype=int)
     B = np.zeros(J.shape[1:], dtype=int)
     for z in range(J.shape[1]):
@@ -298,7 +296,7 @@ def modelMatrix(dPar, mPar, R2):
         for m in range(mPar['M']): # Loop over components/species
             for p in range(mPar['P']):  # Loop over all resonances
                 # Chemical shift between water and peak m (in ppm)
-                omega = 2. * np.pi * gyro * dPar['B0'] * (mPar['CS'][p] - mPar['CS'][0])
+                omega = 2. * np.pi * GYRO * dPar['B0'] * (mPar['CS'][p] - mPar['CS'][0])
                 RA[n, m] += mPar['alpha'][m][p]*np.exp(complex(-(t-dPar['t1'])*R2, t*omega))
     return RA
 
@@ -330,8 +328,6 @@ def getMeanEnergy(Y):
 def reconstruct(dPar, aPar, mPar, B0map=None, R2map=None):
     determineB0 = aPar['graphcutLevel'] is not None or aPar['nICMiter'] > 0
     determineR2 = (aPar['nR2'] > 1) and (R2map is None)
-
-    nVxl = dPar['nx']*dPar['ny']*dPar['nz']
 
     Y = dPar['img']
 
@@ -367,7 +363,7 @@ def reconstruct(dPar, aPar, mPar, B0map=None, R2map=None):
             Qp[r].append(np.dot(RAp[r], Bh[b]))
 
     # For B0 index -> off-resonance in ppm
-    B0step = 1.0/aPar['nB0']/np.abs(dPar['dt'])/gyro/dPar['B0']
+    B0step = 1.0/aPar['nB0']/np.abs(dPar['dt'])/GYRO/dPar['B0']
     if determineB0:
         V = []  # Precalculate discontinuity costs
         for b in range(aPar['nB0']):
