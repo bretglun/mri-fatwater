@@ -17,14 +17,14 @@ def getScore(case, dir, refFile):
     try:
         mat = scipy.io.loadmat(file)
     except:
-        raise Exception('Could not read MATLAB file {}'.format(file))
+        raise Exception(f'Could not read MATLAB file {file}')
     recFF = mat['ff'].flatten(order='F')/100
     recFF.shape = recFF.shape + (1,)
     # Read reference MATLAB-file
     try:
         mat = scipy.io.loadmat(refFile)
     except:
-        raise Exception('Could not read MATLAB file {}'.format(refFile))
+        raise Exception(f'Could not read MATLAB file {refFile}')
     refFF = mat['REFCASES'][0, case - 1]
     mask = mat['MASKS'][0, case - 1]
     # Calculate score
@@ -41,32 +41,31 @@ if __name__ == '__main__':
     refFile = challengePath / 'refdata.mat'
     if not refFile.is_file():
         url = 'https://challenge.ismrm.org/u/5131732/ISMRM_Challenge/refdata.mat'
-        raise Exception('ISMRM 2012 challenge reference data file was not found at: {}. '
-                        'Please download from: {}.'.format(refFile.absolute(), url))
+        raise Exception(f'ISMRM 2012 challenge reference data file was not found at: {refFile.absolute()}. '
+                        f'Please download from: {url}.')
 
     modelParamsFile = rootPath / 'configs/modelParams.yml'
     cases = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 
     for case in cases:
-        caseFile = challengePath / './{}.mat'.format(str(case).zfill(2))
+        caseFile = challengePath / f'{str(case).zfill(2)}.mat'
         if not caseFile.is_file():
             url = 'https://challenge.ismrm.org/u/5131732/ISMRM_Challenge/data_matlab.zip'
-            raise Exception('ISMRM 2012 challenge dataset {} was not found at: {}. '
-                            'Please download from: {}.'.format(case, caseFile.absolute(), url))
+            raise Exception(f'ISMRM 2012 challenge dataset {case} was not found at: {caseFile.absolute()}. '
+                            f'Please download from: {url}.')
 
     results = []
     for case in cases:
-        dataParamsFile = challengePath / './{}.yml'.format(case)
+        dataParamsFile = challengePath / f'{case}.yml'
         if case == 9:
             algoParamsFile = rootPath / 'configs/algoParams2D.yml'
         else:
             algoParamsFile = rootPath / 'configs/algoParams3D.yml'
-        outDir = challengePath / './{}_REC'.format(str(case).zfill(2))
+        outDir = challengePath / f'{str(case).zfill(2)}_REC'
         t = time.time()
         fatwater.separate(dataParamsFile, algoParamsFile, modelParamsFile, outDir)
         results.append((case, getScore(case, outDir, refFile), time.time() - t))
 
     print()
     for case, score, recTime in results:
-        print('Case {}: score {}% in {} sec'.format(
-            case, round(score, 2), round(recTime, 1)))
+        print(f'Case {case}: score {score:.2f}% in {recTime:.1f} sec')

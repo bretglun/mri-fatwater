@@ -176,8 +176,7 @@ def setupModelParams(mPar, clockwisePrecession=False, temperature=None):
     elif mPar['nFAC'] == 3:
         mPar['alpha'] = getFACalphas()
     else:
-        raise Exception('Unknown number of FAC parameters: {}'
-                        .format(mPar['nFAC']))
+        raise Exception(f'Unknown number of FAC parameters: {mPar['nFAC']}')
 
     # For Fatty Acid Composition, create modelParams for two passes: mPar and mPar['pass2']
     # First pass: use standard fat-water separation to determine B0 and R2*
@@ -255,6 +254,6 @@ def readConfig(file, section):
         try:
             config = yaml.safe_load(configFile)
         except yaml.YAMLError as exc:
-            raise Exception('Error reading config file {}'.format(file)) from exc
+            raise Exception(f'Error reading config file {file}') from exc
     config['configPath'] = file.parent
     return config

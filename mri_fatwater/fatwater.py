@@ -24,7 +24,7 @@ def save(output, dPar):
     elif dPar['fileType'] == 'MATLAB':
         MATLAB.save(output, dPar)
     else:
-        raise Exception('Unknown filetype: {}'.format(dPar['fileType']))
+        raise Exception(f'Unknown filetype: {dPar['fileType']}')
 
 
 # Merge output for slices reconstructed separately
@@ -56,7 +56,7 @@ def getFattyAcidComposition(rho):
         PUD = np.abs(rho[3] / (rho[1] + EPSILON))
         CL = np.abs(rho[4] / (rho[1] + EPSILON))
     else:
-        raise Exception('Unknown number of Fatty Acid Composition parameters: {}'.format(nFAC))
+        raise Exception(f'Unknown number of Fatty Acid Composition parameters: {nFAC}')
 
     return CL, UD, PUD
 
@@ -125,20 +125,17 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     config.setupModelParams(mPar, dPar['clockwisePrecession'], dPar['temperature'])
     config.setupAlgoParams(aPar, dPar['N'], mPar['nFAC'])
 
-    print('B0 = {}'.format(round(dPar['B0'], 2)))
-    print('N = {}'.format(dPar['N']))
-    print('t1/dt = {}/{} msec'.format(round(dPar['t1']*1000, 2),
-                                      round(dPar['dt']*1000, 2)))
-    print('nx,ny,nz = {},{},{}'.format(dPar['nx'], dPar['ny'], dPar['nz']))
-    print('dx,dy,dz = {},{},{}'.format(
-        round(dPar['dx'], 2), round(dPar['dy'], 2), round(dPar['dz'], 2)))
+    print(f'B0 = {dPar['B0']:.2f}')
+    print(f'N = {dPar['N']}')
+    print(f't1/dt = {dPar['t1']*1000:.2f}/{dPar['dt']*1000:.2f} msec')
+    print(f'nx,ny,nz = {dPar['nx']},{dPar['ny']},{dPar['nz']}')
+    print(f'dx,dy,dz = {dPar['dx']:.2f},{dPar['dy']:.2f},{dPar['dz']:.2f}')
 
     # Run fat/water processing and save output
     if aPar['use3D'] or len(dPar['sliceList']) == 1:
         if 'slabs' in dPar:
             for iSlab, (slices, z) in enumerate(dPar['slabs']):
-                print('Processing slab {}/{} (slices {}-{})...'
-                      .format(iSlab+1, len(dPar['slabs']), slices[0]+1, slices[-1]+1))
+                print(f'Processing slab {iSlab+1}/{len(dPar['slabs'])} (slices {slices[0]+1}-{slices[-1]+1})...')
                 slabDataParams = config.getSlabDataParams(dPar, slices, z)
                 output = reconstruct(slabDataParams, aPar, mPar)
                 save(output, slabDataParams) # save data slab-wise to save memory
@@ -148,8 +145,7 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     else:
         output = []
         for z, slice in enumerate(dPar['sliceList']):
-            print('Processing slice {} ({}/{})...'
-                  .format(slice+1, z+1, len(dPar['sliceList'])))
+            print(f'Processing slice {slice+1} ({z+1}/{len(dPar['sliceList'])})...')
             sliceDataParams = config.getSliceDataParams(dPar, slice, z)
             output.append(reconstruct(sliceDataParams, aPar, mPar))
         save(mergeOutputSlices(output), dPar)

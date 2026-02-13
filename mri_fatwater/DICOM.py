@@ -136,14 +136,14 @@ def getValidFiles(files, printOutput=False):
             ds = pydicom.read_file(str(file), stop_before_pixels=True)
         except:
             if printOutput:
-                print('Could not read file: {}'.format(file))
+                print(f'Could not read file: {file}')
             continue
         multiframe = isMultiFrame(ds)
         hasRequiredAttrs = [AttrInDataset(ds, attr, multiframe)
                             for attr in reqAttributes]
         if not all(hasRequiredAttrs):
             if printOutput:
-                print('File {} is missing required DICOM tags:'.format(file))
+                print(f'File {file} is missing required DICOM tags:')
                 for i, hasAttr in enumerate(hasRequiredAttrs):
                     if not hasAttr:
                         print(reqAttributes[i])
@@ -178,14 +178,12 @@ def getType(frameList, printType=False):
         return 'MPRI'
     else:
         raise Exception('Unknown combination of image types: ' +
-                        '{} real, {} imag, {} magn, {} phase'
-                        .format(numR, numI, numM, numP))
+                        f'{numR} real, {numI} imag, {numM} magn, {numP} phase')
 
 
 def getSOPInstanceUID():
     t = datetime.datetime.now()
-    datestr = '{:04d}{:02d}{:02d}{:02d}{:02d}{:02d}{:03d}'.format(
-     t.year, t.month, t.day, t.hour, t.minute, t.second, t.microsecond//1000)
+    datestr = f'{t.year:04d}{t.month:02d}{t.day:02d}{t.hour:02d}{t.minute:02d}{t.second:02d}{t.microsecond//1000:03d}'
     randstr = str(np.random.randint(1000, 1000000000))
     uidstr = "1.3.12.2.1107.5.2.32.35356." + datestr + randstr
     return uidstr
@@ -234,8 +232,7 @@ def updateDataParams(dPar, files):
     echoTimes = [echoTimes[echo] for echo in dPar['echoes']]
     dPar['N'] = len(dPar['echoes'])
     if dPar['N'] < 2:
-        raise Exception('At least 2 echoes required, only {} given'
-                        .format(dPar['N']))
+        raise Exception(f'At least 2 echoes required, only {dPar['N']} given')
     dPar['t1'] = echoTimes[0]
     dPar['dt'] = np.mean(np.diff(echoTimes))
     if np.max(np.diff(echoTimes))/dPar['dt'] > 1.05 or \
@@ -367,7 +364,7 @@ def setTagValue(ds, key, val, frame=None, VR=None):
             return True
         ds.add_new(tagDict[key], VR, val)
         return True
-    # print('Warning: DICOM tag {} was not set'.format(key))
+    # print(f'Warning: DICOM tag {key} was not set')
     return False
 
 
@@ -396,7 +393,7 @@ def saveSeries(outDir, imgType, img, dPar):
     if dPar['frameList']:
         DICOMimgType = getType(dPar['frameList'])
     for z, slice in enumerate(dPar['sliceList']):
-        filename = outDir / './{}.dcm'.format(slice)
+        filename = outDir / f'{slice}.dcm'
         # Extract slice, scale and type cast pixel data
         pixelData = np.array([max(0, (val-reScaleIntercept)/reScaleSlope)
                       for val in img[:, :, z].flatten()])
@@ -477,5 +474,5 @@ def save(output, dPar):
     for seriesType in output:
         outDir = dPar['outDir'] / seriesType
         outDir.mkdir(parents=True, exist_ok=True)
-        print(r'Writing image{} to "{}"'.format('s'*(dPar['nz'] > 1), outDir))
+        print(f'Writing image{'s' if dPar['nz']>1 else ''} to "{outDir}"')
         saveSeries(outDir, seriesType, output[seriesType], dPar)

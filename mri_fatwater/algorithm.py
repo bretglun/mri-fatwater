@@ -185,8 +185,7 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
                                     offresPenalty, offresCenter).reshape(
                                     high['nz'], high['ny'], high['nx'])
         dB0 = getB0fromHighLevel(dB0high, level, high)
-        print('Level ({},{},{}): '.format(
-            level['nx'], level['ny'], level['nz']))
+        print(f'Level ({level['nx']},{level['ny']},{level['nz']}): ')
 
     # Prepare MRF
     print('Preparing MRF...', end='')

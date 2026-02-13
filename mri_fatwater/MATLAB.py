@@ -9,7 +9,7 @@ def updateDataParams(dPar, file):
     try:
         mat = scipy.io.loadmat(file)
     except:
-        raise Exception('Could not read MATLAB file {}'.format(file))
+        raise Exception(f'Could not read MATLAB file {file}')
     data = mat['imDataParams'][0, 0]
 
     for i in range(0, 4):
@@ -53,8 +53,7 @@ def updateDataParams(dPar, file):
         dPar['Ny'], dPar['ny'] = dPar['ny'], y1-y0
         img = img[y0:y1, x0:x1, :, :, :]
     if dPar['N'] < 2:
-        raise Exception(
-            'At least 2 echoes required, only {} given'.format(dPar['N']))
+        raise Exception(f'At least 2 echoes required, only {dPar['N']} given')
     dPar['t1'] = echoTimes[0]
     dPar['dt'] = np.mean(np.diff(echoTimes))
     if np.max(np.diff(echoTimes))/dPar['dt'] > 1.05 or np.min(
@@ -76,6 +75,6 @@ def updateDataParams(dPar, file):
 # Save output as MATLAB arrays
 def save(output, dPar):
     dPar['outDir'].mkdir(parents=True, exist_ok=True)
-    filename = dPar['outDir'] / './{}.mat'.format(dPar['sliceList'][0])
-    print(r'Writing images to "{}"'.format(filename))
+    filename = dPar['outDir'] / f'{dPar['sliceList'][0]}.mat'
+    print(f'Writing images to "{filename}"')
     scipy.io.savemat(filename, output)
