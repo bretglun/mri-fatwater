@@ -6,10 +6,7 @@ import numpy as np
 # (arranged according to ISMRM fat-water toolbox)
 def updateDataParams(dPar, file):
     dPar['fileType'] = 'MATLAB'
-    try:
-        mat = scipy.io.loadmat(file)
-    except:
-        raise Exception(f'Could not read MATLAB file {file}')
+    mat = scipy.io.loadmat(file)
     data = mat['imDataParams'][0, 0]
 
     for i in range(0, 4):
@@ -40,7 +37,7 @@ def updateDataParams(dPar, file):
         dPar['nz'] = len(dPar['sliceList'])
     # Get only echoes in dPar['echoes']
     dPar['totalN'] = dPar['N']
-    if not 'echoes' in dPar:
+    if 'echoes' not in dPar:
         dPar['echoes'] = range(dPar['totalN'])
     else:
         img = img[:, :, :, :, dPar['echoes']]

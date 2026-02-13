@@ -133,10 +133,10 @@ def getValidFiles(files, printOutput=False):
     validFiles = []
     for file in files:
         try:
-            ds = pydicom.read_file(str(file), stop_before_pixels=True)
-        except:
+            ds = pydicom.dcmread(str(file), stop_before_pixels=True)
+        except (pydicom.errors.InvalidDicomError, FileNotFoundError, IsADirectoryError) as e:
             if printOutput:
-                print(f'Could not read file: {file}')
+                print(f'Could not read file "{file}": {e}')
             continue
         multiframe = isMultiFrame(ds)
         hasRequiredAttrs = [AttrInDataset(ds, attr, multiframe)
@@ -190,9 +190,9 @@ def getSOPInstanceUID():
 
 
 def getSeriesInstanceUID(dPar, seriesDescription):
-    if not 'seriesInstanceUIDs' in dPar:
+    if 'seriesInstanceUIDs' not in dPar:
         dPar['seriesInstanceUIDs'] = {}
-    if not seriesDescription in dPar['seriesInstanceUIDs']:
+    if seriesDescription not in dPar['seriesInstanceUIDs']:
         dPar['seriesInstanceUIDs'][seriesDescription] = getSOPInstanceUID() + ".0.0.0"
     return dPar['seriesInstanceUIDs'][seriesDescription]
 
@@ -202,7 +202,7 @@ def updateDataParams(dPar, files):
     dPar['fileType'] = 'DICOM'
     frameList = []
     for file in files:
-        ds = pydicom.read_file(str(file), stop_before_pixels=True)
+        ds = pydicom.dcmread(str(file), stop_before_pixels=True)
         multiframe = isMultiFrame(ds)
         if multiframe:
             if len(files) > 1:
@@ -258,7 +258,7 @@ def updateDataParams(dPar, files):
     img = []
     if multiframe:
         file = frameList[0][0]
-        dcm = pydicom.read_file(str(file))
+        dcm = pydicom.dcmread(str(file))
     for n in dPar['echoes']:
         for slice in dPar['sliceList']:
             i = (dPar['N']*slice+n)*len(type)
@@ -277,8 +277,8 @@ def updateDataParams(dPar, files):
                 else:
                     magnFile = frameList[magnFrame][0]
                     phaseFile = frameList[phaseFrame][0]
-                    mDcm = pydicom.read_file(str(magnFile))
-                    pDcm = pydicom.read_file(str(phaseFile))
+                    mDcm = pydicom.dcmread(str(magnFile))
+                    pDcm = pydicom.dcmread(str(phaseFile))
                     magn = mDcm.pixel_array[y1:y2, x1:x2].flatten()
                     phase = pDcm.pixel_array[y1:y2, x1:x2].flatten()
                     # Abs val needed for Siemens data to get correct phase sign
@@ -312,8 +312,8 @@ def updateDataParams(dPar, files):
                 else:
                     realFile = frameList[realFrame][0]
                     imagFile = frameList[imagFrame][0]
-                    rDcm = pydicom.read_file(str(realFile))
-                    iDcm = pydicom.read_file(str(imagFile))
+                    rDcm = pydicom.dcmread(str(realFile))
+                    iDcm = pydicom.dcmread(str(imagFile))
                     realPart = rDcm.pixel_array[y1:y2, x1:x2].flatten()
                     imagPart = iDcm.pixel_array[y1:y2, x1:x2].flatten()
                     # Assumes real and imaginary slope/intercept are equal
@@ -387,7 +387,7 @@ def saveSeries(outDir, imgType, img, dPar):
     multiframe = dPar['frameList'] and \
         len(set([frame[0] for frame in dPar['frameList']])) == 1
     if multiframe:
-        ds = pydicom.read_file(str(dPar['frameList'][0][0]))
+        ds = pydicom.dcmread(str(dPar['frameList'][0][0]))
         imVol = np.empty([dPar['nz'], dPar['ny']*dPar['nx']], dtype='uint16')
         frames = []
     if dPar['frameList']:
@@ -406,7 +406,7 @@ def saveSeries(outDir, imgType, img, dPar):
             frame = dPar['frameList'][dPar['totalN']*slice*len(DICOMimgType)]
             iFrame = frame[1]
             if not multiframe:
-                ds = pydicom.read_file(str(frame[0]))
+                ds = pydicom.dcmread(str(frame[0]))
         else:
             iFrame = None
             # Create new DICOM images from scratch

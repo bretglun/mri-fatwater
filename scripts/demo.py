@@ -14,17 +14,11 @@ from mri_fatwater import fatwater
 def getScore(case, dir, refFile):
     # Read reconstructed MATLAB-file
     file = dir / '0.mat'
-    try:
-        mat = scipy.io.loadmat(file)
-    except:
-        raise Exception(f'Could not read MATLAB file {file}')
+    mat = scipy.io.loadmat(file)
     recFF = mat['ff'].flatten(order='F')/100
     recFF.shape = recFF.shape + (1,)
     # Read reference MATLAB-file
-    try:
-        mat = scipy.io.loadmat(refFile)
-    except:
-        raise Exception(f'Could not read MATLAB file {refFile}')
+    mat = scipy.io.loadmat(refFile)
     refFF = mat['REFCASES'][0, case - 1]
     mask = mat['MASKS'][0, case - 1]
     # Calculate score

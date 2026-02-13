@@ -311,9 +311,9 @@ def getDtmp(A):
 
 # Separate and concatenate real and imag parts of complex matrix M
 def realify(M):
-    R = np.real(M)
-    I = np.imag(M)
-    return np.concatenate((np.concatenate((R, I)), np.concatenate((-I, R))), 1)
+    re = np.real(M)
+    im = np.imag(M)
+    return np.concatenate((np.concatenate((re, im)), np.concatenate((-im, re))), 1)
 
 
 # Get mean square signal magnitude within foreground
