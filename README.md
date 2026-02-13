@@ -34,7 +34,7 @@ HOW TO USE
 First install required packages, see dependencies.
 To use the command-line tool, type 
 ```
-python mri_fatwater/cli.py -h
+python -m mri_fatwater.cli -h
 ```
 To use as a Python script, see example file [./scripts/demo.py](scripts/demo.py). 
 The demo reconstructs [data from the ISMRM 2012 challenge](
@@ -47,7 +47,7 @@ fat separation*. Magn Reson Med, 78(3):941-949, 2017. [doi: 10.1002/mrm.26479]
 
 DEPENDENCIES
 -------------------------------------------------------------------------------
-See [./environment.yml](environment.yml)
+See [./pyproject.toml](pyproject.toml).
 
 CONTACT INFORMATION
 -------------------------------------------------------------------------------

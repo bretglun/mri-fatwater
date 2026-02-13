@@ -1,0 +1,25 @@
+[project]
+name = "mri-fatwater"
+version = "1.0.0"
+description = "MRI algorithms for fat-water separation based on chemical shift with B0-correction"
+authors = [
+    { name = "Johan Berglund", email = "berglund.hpj@gmail.com" },
+]
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.14"
+dependencies = [
+    "numpy>=2.4.2",
+    "pydicom>=3.0.1",
+    "pyyaml>=6.0.3",
+    "scikit-image>=0.26.0",
+    "scipy>=1.17.0",
+    "thinqpbo>=0.1.5",
+]
+
+[project.scripts]
+mri-fatwater = "mri_fatwater.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
