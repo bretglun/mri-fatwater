@@ -1,5 +1,5 @@
 import numpy as np
-from mri_fatwater import algorithm, config, DICOM, MATLAB
+from mri_fatwater import algorithm, config, params, DICOM, MATLAB
 from .constants import EPSILON
 
 
@@ -79,36 +79,36 @@ def reconstruct(dPar, aPar, mPar):
 
     # Prepare prescribed output
     output = {}
-    if 'wat' in aPar['output']:
+    if 'wat' in aPar.output:
         output['wat'] = np.abs(wat)
-    if 'fat' in aPar['output']:
+    if 'fat' in aPar.output:
         output['fat'] = np.abs(fat)
-    if 'phi' in aPar['output']:
+    if 'phi' in aPar.output:
         output['phi'] = np.angle(wat, deg=True) + 180
-    if 'ip' in aPar['output']: # Calculate synthetic in-phase
+    if 'ip' in aPar.output: # Calculate synthetic in-phase
         output['ip'] = np.abs(wat+fat)
-    if 'op' in aPar['output']: # Calculate synthetic opposed-phase
+    if 'op' in aPar.output: # Calculate synthetic opposed-phase
         output['op'] = np.abs(wat-fat)
-    if 'ff' in aPar['output']: # Calculate the fat fraction
-        if aPar['magnitudeDiscrimination']:  # to avoid bias from noise
+    if 'ff' in aPar.output: # Calculate the fat fraction
+        if aPar.magnitudeDiscrimination:  # to avoid bias from noise
             output['ff'] = 100 * np.real(fat / (wat + fat + EPSILON))
         else:
             output['ff'] = 100 * np.abs(fat)/(np.abs(wat) + np.abs(fat) + EPSILON)
-    if 'B0map' in aPar['output']:
+    if 'B0map' in aPar.output:
         output['B0map'] = B0map
-    if 'R2map' in aPar['output']:
+    if 'R2map' in aPar.output:
         output['R2map'] = R2map
 
     # Do any Fatty Acid Composition in a second pass
     if mPar['nFAC'] > 0:
-        rho = algorithm.reconstruct(dPar, aPar['pass2'], mPar['pass2'], B0map, R2map)[0]
+        rho = algorithm.reconstruct(dPar, aPar.pass2, mPar['pass2'], B0map, R2map)[0]
         CL, UD, PUD = getFattyAcidComposition(rho)
     
-        if 'CL' in aPar['output']:
+        if 'CL' in aPar.output:
             output['CL'] = CL
-        if 'UD' in aPar['output']:
+        if 'UD' in aPar.output:
             output['UD'] = UD
-        if 'PUD' in aPar['output']:
+        if 'PUD' in aPar.output:
             output['PUD'] = PUD
 
     return output
@@ -117,13 +117,13 @@ def reconstruct(dPar, aPar, mPar):
 def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     # Read configuration files
     dPar = config.readConfig(dataParamFile, 'data parameters')
-    aPar = config.readConfig(algoParamFile, 'algorithm parameters')
     mPar = config.readConfig(modelParamFile, 'model parameters')
+    aPar = params.AlgoParams(configFile=algoParamFile)
 
     # Setup configuration objects
     config.setupDataParams(dPar, outDir)
     config.setupModelParams(mPar, dPar['clockwisePrecession'], dPar['temperature'])
-    config.setupAlgoParams(aPar, dPar['N'], mPar['nFAC'])
+    aPar.setup(dPar['N'], mPar['nFAC'])
 
     print(f'B0 = {dPar['B0']:.2f}')
     print(f'N = {dPar['N']}')
@@ -132,7 +132,7 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     print(f'dx,dy,dz = {dPar['dx']:.2f},{dPar['dy']:.2f},{dPar['dz']:.2f}')
 
     # Run fat/water processing and save output
-    if aPar['use3D'] or len(dPar['sliceList']) == 1:
+    if aPar.use3D or len(dPar['sliceList']) == 1:
         if 'slabs' in dPar:
             for iSlab, (slices, z) in enumerate(dPar['slabs']):
                 print(f'Processing slab {iSlab+1}/{len(dPar['slabs'])} (slices {slices[0]+1}-{slices[-1]+1})...')
