@@ -1,3 +1,4 @@
+from dataclasses import replace
 import numpy as np
 from mri_fatwater import algorithm, config, params, DICOM, MATLAB
 from .constants import EPSILON
@@ -100,7 +101,7 @@ def reconstruct(dPar, aPar, mPar):
         output['R2map'] = R2map
 
     # Do any Fatty Acid Composition in a second pass
-    if mPar.nFAC > 0:
+    if hasattr(mPar, 'pass2'):
         rho = algorithm.reconstruct(dPar, aPar.pass2, mPar.pass2, B0map, R2map)[0]
         CL, UD, PUD = getFattyAcidComposition(rho)
     
@@ -117,13 +118,18 @@ def reconstruct(dPar, aPar, mPar):
 def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     # Read configuration files
     dPar = config.readConfig(dataParamFile, 'data parameters')
-    mPar = params.ModelParams(configFile=modelParamFile)
+    config.setupDataParams(dPar, outDir)
+    mPar = params.ModelParams(configFile=modelParamFile, clockwisePrecession=dPar['clockwisePrecession'], temperature=dPar['temperature'])
     aPar = params.AlgoParams(configFile=algoParamFile)
 
-    # Setup configuration objects
-    config.setupDataParams(dPar, outDir)
-    mPar.setup(dPar['clockwisePrecession'], dPar['temperature'])
-    aPar.setup(dPar['N'], mPar.nFAC)
+    if mPar.nFAC > 0:
+        # For Fatty Acid Composition, create algorithm and model params for two passes
+        # First pass: use standard fat-water separation to determine B0 and R2*
+        # Second pass: use B0- and R2*-maps from first pass and do the Fatty Acid Composition
+        aPar.pass2 = replace(aPar, nICMiter=0, graphcut=False, graphcutLevel=None)
+        mPar2 = replace(mPar)
+        mPar = replace(mPar, nFAC=0, relAmps=None)
+        mPar.pass2 = mPar2
 
     print(f'B0 = {dPar['B0']:.2f}')
     print(f'N = {dPar['N']}')

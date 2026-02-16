@@ -37,36 +37,24 @@ class ModelParams:
 
     configFile: Optional[str] = field(default=None, repr=False)
 
-    def __init__(self, configFile: Optional[str] = None, **overrides):
+    def __init__(self, configFile: Optional[str] = None, clockwisePrecession=False, temperature=None, **overrides):
         init_dataclass(self, configFile, **overrides)
-        if self.nFAC > 3:
-            raise ValueError(f'Unknown number of FAC parameters: {self.nFAC}')
-
-    def setup(self, clockwisePrecession=False, temperature=None):
-        # Temperature dependence according to Hernando et al., MRM 72(2):464–70, 2014.
+        
+        if self.nFAC > 0:
+            if self.nFAC > 3:
+                raise ValueError(f'Unknown number of FAC parameters: {self.nFAC}')
+            if len(self.fatCS) != 10:
+                raise ValueError('FAC excpects exactly one water and ten triglyceride resonances')
+            self.relAmps = None
+        
+        # Temperature dependence according to Hernando et al., MRM 72(2):464–70, 2014
         if temperature is not None:
             self.watCS = 1.3 + 3.748 -.01085 * temperature # Temp in [°C]
-        
+
         self.CS = np.array([self.watCS] + self.fatCS, dtype=np.float32)
         if clockwisePrecession:
             self.CS *= -1
-
-        if self.nFAC > 0 and len(self.fatCS) != 10:
-            raise ValueError(
-                'FAC excpects exactly one water and ten triglyceride resonances')
         
-        if self.nFAC > 0:
-            # For Fatty Acid Composition, create modelParams for two passes: self.ndelf.pass2
-            # First pass: use standard fat-water separation to determine B0 and R2*
-            # Second pass: do the Fatty Acid Composition
-            self.pass2 = replace(self) # copy self into pass 2, then modify pass 1
-            self.pass2.set_alpha()
-            self.nFAC = 0
-            self.relAmps = None
-        
-        self.set_alpha()
-
-    def set_alpha(self):
         self.M = 2 + self.nFAC # Number of linear components
         self.P = len(self.CS) # Number of resonance peaks
         self.alpha = np.zeros([self.M, self.P], dtype=np.float32)
@@ -125,10 +113,9 @@ class AlgoParams:
 
     configFile: Optional[str] = field(default=None, repr=False)
 
-    def __init__(self, configFile: Optional[str] = None, **overrides):
+    def __init__(self, configFile: Optional[str] = None, N=None, nFAC=0, **overrides):
         init_dataclass(self, configFile, **overrides)
     
-    def setup(self, N, nFAC=0):
         if self.realEstimates is None:
             self.realEstimates = (N == 2)
         
@@ -137,12 +124,6 @@ class AlgoParams:
         
         self.maxICMupdate = round(self.nB0/10)
 
-        # For Fatty Acid Composition, create algorithmParams for two passes: self and self.pass2
-        # First pass: use standard fat-water separation to determine B0 and R2*
-        # Second pass: use B0- and R2*-maps from first pass
-        if nFAC > 0:
-            self.pass2 = replace(self, nICMiter=0, graphcut=False, graphcutLevel=None)
-        
         self.output = ['wat', 'fat', 'ff', 'B0map']
         if self.realEstimates:
             self.output.append('phi')
