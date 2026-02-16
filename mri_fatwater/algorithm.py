@@ -289,14 +289,14 @@ def modulationVectors(nB0, N):
 
 # Construct matrix RA
 def modelMatrix(dPar, mPar, R2):
-    RA = np.zeros(shape=(dPar['N'], mPar['M']), dtype=complex)
+    RA = np.zeros(shape=(dPar['N'], mPar.M), dtype=complex)
     for n in range(dPar['N']):
         t = dPar['t1'] + n * dPar['dt']
-        for m in range(mPar['M']): # Loop over components/species
-            for p in range(mPar['P']):  # Loop over all resonances
+        for m in range(mPar.M): # Loop over components/species
+            for p in range(mPar.P):  # Loop over all resonances
                 # Chemical shift between water and peak m (in ppm)
-                omega = 2. * np.pi * GYRO * dPar['B0'] * (mPar['CS'][p] - mPar['CS'][0])
-                RA[n, m] += mPar['alpha'][m][p]*np.exp(complex(-(t-dPar['t1'])*R2, t*omega))
+                omega = 2. * np.pi * GYRO * dPar['B0'] * (mPar.CS[p] - mPar.CS[0])
+                RA[n, m] += mPar.alpha[m][p]*np.exp(complex(-(t-dPar['t1'])*R2, t*omega))
     return RA
 
 
@@ -395,7 +395,7 @@ def reconstruct(dPar, aPar, mPar, B0map=None, R2map=None):
         R2 = np.array(R2map/aPar.R2step, dtype=int)
 
     # Find least squares solution given dB0 and R2
-    rho = np.zeros(shape=(mPar['M'], dPar['nz'], dPar['ny'], dPar['nx']), dtype=complex)
+    rho = np.zeros(shape=(mPar.M, dPar['nz'], dPar['ny'], dPar['nx']), dtype=complex)
     for r in range(aPar.nR2):
         for b in range(aPar.nB0):
             vxls = (dB0 == b)*(R2 == r)

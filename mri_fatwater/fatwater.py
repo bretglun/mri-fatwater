@@ -75,7 +75,7 @@ def reconstruct(dPar, aPar, mPar):
     # Do the fat/water separation
     rho, B0map, R2map = algorithm.reconstruct(dPar, aPar, mPar)
     wat = rho[0]
-    fat = getFat(rho, mPar['alpha'])
+    fat = getFat(rho, mPar.alpha)
 
     # Prepare prescribed output
     output = {}
@@ -100,8 +100,8 @@ def reconstruct(dPar, aPar, mPar):
         output['R2map'] = R2map
 
     # Do any Fatty Acid Composition in a second pass
-    if mPar['nFAC'] > 0:
-        rho = algorithm.reconstruct(dPar, aPar.pass2, mPar['pass2'], B0map, R2map)[0]
+    if mPar.nFAC > 0:
+        rho = algorithm.reconstruct(dPar, aPar.pass2, mPar.pass2, B0map, R2map)[0]
         CL, UD, PUD = getFattyAcidComposition(rho)
     
         if 'CL' in aPar.output:
@@ -117,13 +117,13 @@ def reconstruct(dPar, aPar, mPar):
 def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     # Read configuration files
     dPar = config.readConfig(dataParamFile, 'data parameters')
-    mPar = config.readConfig(modelParamFile, 'model parameters')
+    mPar = params.ModelParams(configFile=modelParamFile)
     aPar = params.AlgoParams(configFile=algoParamFile)
 
     # Setup configuration objects
     config.setupDataParams(dPar, outDir)
-    config.setupModelParams(mPar, dPar['clockwisePrecession'], dPar['temperature'])
-    aPar.setup(dPar['N'], mPar['nFAC'])
+    mPar.setup(dPar['clockwisePrecession'], dPar['temperature'])
+    aPar.setup(dPar['N'], mPar.nFAC)
 
     print(f'B0 = {dPar['B0']:.2f}')
     print(f'N = {dPar['N']}')
