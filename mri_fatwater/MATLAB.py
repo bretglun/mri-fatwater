@@ -5,7 +5,7 @@ import numpy as np
 # update dPar with information retrieved from MATLAB file
 # (arranged according to ISMRM fat-water toolbox)
 def updateDataParams(dPar, file):
-    dPar['fileType'] = 'MATLAB'
+    dPar.fileType = 'MATLAB'
     mat = scipy.io.loadmat(file)
     data = mat['imDataParams'][0, 0]
 
@@ -16,7 +16,7 @@ def updateDataParams(dPar, file):
             echoTimes = data[i][0]  # TEs [sec]
         else:
             if data[i][0, 0] > 1:
-                dPar['B0'] = data[i][0, 0]  # Fieldstrength [T]
+                dPar.B0 = data[i][0, 0]  # Fieldstrength [T]
             else:
                 clockwise = data[i][0, 0]  # Clockwiseprecession?
 
@@ -24,54 +24,54 @@ def updateDataParams(dPar, file):
         raise Exception('Warning: Not clockwise precession. ' +
                         'Need to write code to handle this case!')
 
-    dPar['ny'], dPar['nx'], dPar['nz'], nCoils, dPar['N'] = img.shape
+    dPar.ny, dPar.nx, dPar.nz, nCoils, dPar.N = img.shape
     if nCoils > 1:
         raise Exception('Warning: more than one coil. ' +
                         'Need to write code to coil combine!')
 
-    # Get only slices in dPar['sliceList']
-    if 'sliceList' not in dPar:
-        dPar['sliceList'] = range(dPar['nz'])
+    # Get only slices in dPar.sliceList
+    if len(dPar.sliceList)==0:
+        dPar.sliceList = range(dPar.nz)
     else:
-        img = img[:, :, dPar['sliceList'], :, :]
-        dPar['nz'] = len(dPar['sliceList'])
-    # Get only echoes in dPar['echoes']
-    dPar['totalN'] = dPar['N']
-    if 'echoes' not in dPar:
-        dPar['echoes'] = range(dPar['totalN'])
+        img = img[:, :, dPar.sliceList, :, :]
+        dPar.nz = len(dPar.sliceList)
+    # Get only echoes in dPar.echoes
+    dPar.totalN = dPar.N
+    if not hasattr(dPar, 'echoes'):
+        dPar.echoes = range(dPar.totalN)
     else:
-        img = img[:, :, :, :, dPar['echoes']]
-        echoTimes = echoTimes[dPar['echoes']]
-        dPar['N'] = len(dPar['echoes'])
-    if 'cropFOV' in dPar:
-        x0, x1 = dPar['cropFOV'][0], dPar['cropFOV'][1]
-        y0, y1 = dPar['cropFOV'][2], dPar['cropFOV'][3]
-        dPar['Nx'], dPar['nx'] = dPar['nx'], x1-x0
-        dPar['Ny'], dPar['ny'] = dPar['ny'], y1-y0
+        img = img[:, :, :, :, dPar.echoes]
+        echoTimes = echoTimes[dPar.echoes]
+        dPar.N = len(dPar.echoes)
+    if hasattr(dPar, 'cropFOV'):
+        x0, x1 = dPar.cropFOV[0], dPar.cropFOV[1]
+        y0, y1 = dPar.cropFOV[2], dPar.cropFOV[3]
+        dPar.Nx, dPar.nx = dPar.nx, x1-x0
+        dPar.Ny, dPar.ny = dPar.ny, y1-y0
         img = img[y0:y1, x0:x1, :, :, :]
-    if dPar['N'] < 2:
-        raise Exception(f'At least 2 echoes required, only {dPar['N']} given')
-    dPar['t1'] = echoTimes[0]
-    dPar['dt'] = np.mean(np.diff(echoTimes))
-    if np.max(np.diff(echoTimes))/dPar['dt'] > 1.05 or np.min(
-      np.diff(echoTimes))/dPar['dt'] < .95:
+    if dPar.N < 2:
+        raise Exception(f'At least 2 echoes required, only {dPar.N} given')
+    dPar.t1 = echoTimes[0]
+    dPar.dt = np.mean(np.diff(echoTimes))
+    if np.max(np.diff(echoTimes))/dPar.dt > 1.05 or np.min(
+      np.diff(echoTimes))/dPar.dt < .95:
         raise Exception('Warning: echo inter-spacing varies more than 5%')
 
-    dPar['frameList'] = []
+    dPar.frameList = []
 
-    dPar['dx'], dPar['dy'], dPar['dz'] = 1.5, 1.5, 5  # Ad hoc assumption on voxelsize
+    dPar.dx, dPar.dy, dPar.dz = 1.5, 1.5, 5  # Ad hoc assumption on voxelsize
 
     # To get data as: (echo,slice,row,col)
-    img.shape = (dPar['ny'], dPar['nx'], dPar['nz'], dPar['N'])
+    img.shape = (dPar.ny, dPar.nx, dPar.nz, dPar.N)
     img = np.transpose(img)
     img = np.swapaxes(img, 2, 3)
 
-    dPar['img'] = img*dPar['reScale']
+    dPar.img = img*dPar.reScale
 
 
 # Save output as MATLAB arrays
 def save(output, dPar):
-    dPar['outDir'].mkdir(parents=True, exist_ok=True)
-    filename = dPar['outDir'] / f'{dPar['sliceList'][0]}.mat'
+    dPar.outDir.mkdir(parents=True, exist_ok=True)
+    filename = dPar.outDir / f'{dPar.sliceList[0]}.mat'
     print(f'Writing images to "{filename}"')
     scipy.io.savemat(filename, output)

@@ -289,14 +289,14 @@ def modulationVectors(nB0, N):
 
 # Construct matrix RA
 def modelMatrix(dPar, mPar, R2):
-    RA = np.zeros(shape=(dPar['N'], mPar.M), dtype=complex)
-    for n in range(dPar['N']):
-        t = dPar['t1'] + n * dPar['dt']
+    RA = np.zeros(shape=(dPar.N, mPar.M), dtype=complex)
+    for n in range(dPar.N):
+        t = dPar.t1 + n * dPar.dt
         for m in range(mPar.M): # Loop over components/species
             for p in range(mPar.P):  # Loop over all resonances
                 # Chemical shift between water and peak m (in ppm)
-                omega = 2. * np.pi * GYRO * dPar['B0'] * (mPar.CS[p] - mPar.CS[0])
-                RA[n, m] += mPar.alpha[m][p]*np.exp(complex(-(t-dPar['t1'])*R2, t*omega))
+                omega = 2. * np.pi * GYRO * dPar.B0 * (mPar.CS[p] - mPar.CS[0])
+                RA[n, m] += mPar.alpha[m][p]*np.exp(complex(-(t-dPar.t1)*R2, t*omega))
     return RA
 
 
@@ -328,11 +328,11 @@ def reconstruct(dPar, aPar, mPar, B0map=None, R2map=None):
     determineB0 = aPar.graphcutLevel is not None or aPar.nICMiter > 0
     determineR2 = (aPar.nR2 > 1) and (R2map is None)
 
-    Y = dPar['img']
+    Y = dPar.img
 
     # Prepare matrices
     # Off-resonance modulation vectors (one for each off-resonance value)
-    B, Bh = modulationVectors(aPar.nB0, dPar['N'])
+    B, Bh = modulationVectors(aPar.nB0, dPar.N)
     RA, RAp, C, Qp = [], [], [], []
     D = None
     if aPar.realEstimates:
@@ -356,22 +356,22 @@ def reconstruct(dPar, aPar, mPar, B0map=None, R2map=None):
         C.append([])
         Qp.append([])
         # Null space projection matrix
-        proj = np.eye(dPar['N']*(1+aPar.realEstimates))-np.dot(RA[r], RAp[r])
+        proj = np.eye(dPar.N*(1+aPar.realEstimates))-np.dot(RA[r], RAp[r])
         for b in range(aPar.nB0):
             C[r].append(np.dot(np.dot(B[b], proj), Bh[b]))
             Qp[r].append(np.dot(RAp[r], Bh[b]))
 
     # For B0 index -> off-resonance in ppm
-    B0step = 1.0/aPar.nB0/np.abs(dPar['dt'])/GYRO/dPar['B0']
+    B0step = 1.0/aPar.nB0/np.abs(dPar.dt)/GYRO/dPar.B0
     if determineB0:
         V = []  # Precalculate discontinuity costs
         for b in range(aPar.nB0):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        level = {'L': 0, 'nx': dPar['nx'], 'ny': dPar['ny'], 'nz': dPar['nz'],
+        level = {'L': 0, 'nx': dPar.nx, 'ny': dPar.ny, 'nz': dPar.nz,
                  'sx': 1, 'sy': 1, 'sz': 1,
-                 'dx': dPar['dx'], 'dy': dPar['dy'], 'dz': dPar['dz']}
+                 'dx': dPar.dx, 'dy': dPar.dy, 'dz': dPar.dz}
         J = getB0Residuals(Y, C, aPar.nB0, aPar.iR2cand, D)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
@@ -380,7 +380,7 @@ def reconstruct(dPar, aPar, mPar, B0map=None, R2map=None):
         dB0 = calculateFieldMap(aPar.nB0, level, aPar.graphcutLevel,
                                 aPar.multiScale, aPar.maxICMupdate,
                                 aPar.nICMiter, J, V, aPar.mu,
-                                offresPenalty, int(dPar['offresCenter']/B0step))
+                                offresPenalty, int(dPar.offresCenter/B0step))
     elif B0map is None:
         dB0 = np.zeros(Y.shape[1:], dtype=int)
     else:
@@ -395,7 +395,7 @@ def reconstruct(dPar, aPar, mPar, B0map=None, R2map=None):
         R2 = np.array(R2map/aPar.R2step, dtype=int)
 
     # Find least squares solution given dB0 and R2
-    rho = np.zeros(shape=(mPar.M, dPar['nz'], dPar['ny'], dPar['nx']), dtype=complex)
+    rho = np.zeros(shape=(mPar.M, dPar.nz, dPar.ny, dPar.nx), dtype=complex)
     for r in range(aPar.nR2):
         for b in range(aPar.nB0):
             vxls = (dB0 == b)*(R2 == r)

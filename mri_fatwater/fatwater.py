@@ -1,15 +1,15 @@
 from dataclasses import replace
 import numpy as np
-from mri_fatwater import algorithm, config, params, DICOM, MATLAB
+from mri_fatwater import algorithm, params, DICOM, MATLAB
 from .constants import EPSILON
 
 
 # Zero pad back any cropped FOV
 def padCropped(croppedImage, dPar):
-    if 'cropFOV' in dPar:
-        image = np.zeros((dPar['nz'], dPar['Ny'], dPar['Nx']))
-        x1, x2 = dPar['cropFOV'][0], dPar['cropFOV'][1]
-        y1, y2 = dPar['cropFOV'][2], dPar['cropFOV'][3]
+    if hasattr(dPar, 'cropFOV'):
+        image = np.zeros((dPar.nz, dPar.Ny, dPar.Nx))
+        x1, x2 = dPar.cropFOV[0], dPar.cropFOV[1]
+        y1, y2 = dPar.cropFOV[2], dPar.cropFOV[3]
         image[:, y1:y2, x1:x2] = croppedImage
         return image
     else:
@@ -18,14 +18,14 @@ def padCropped(croppedImage, dPar):
 
 def save(output, dPar):
     for seriesType in output: # zero pad if was cropped and reshape to row,col,slice
-        output[seriesType] = np.moveaxis(padCropped(output[seriesType].reshape((dPar['nz'], dPar['ny'], dPar['nx'])), dPar), 0, -1)
+        output[seriesType] = np.moveaxis(padCropped(output[seriesType].reshape((dPar.nz, dPar.ny, dPar.nx)), dPar), 0, -1)
     
-    if dPar['fileType'] == 'DICOM':
+    if dPar.fileType == 'DICOM':
         DICOM.save(output, dPar)
-    elif dPar['fileType'] == 'MATLAB':
+    elif dPar.fileType == 'MATLAB':
         MATLAB.save(output, dPar)
     else:
-        raise Exception(f'Unknown filetype: {dPar['fileType']}')
+        raise Exception(f'Unknown filetype: {dPar.fileType}')
 
 
 # Merge output for slices reconstructed separately
@@ -117,9 +117,8 @@ def reconstruct(dPar, aPar, mPar):
 
 def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     # Read configuration files
-    dPar = config.readConfig(dataParamFile, 'data parameters')
-    config.setupDataParams(dPar, outDir)
-    mPar = params.ModelParams(configFile=modelParamFile, clockwisePrecession=dPar['clockwisePrecession'], temperature=dPar['temperature'])
+    dPar = params.DataParams(dataParamFile, outDir=outDir)
+    mPar = params.ModelParams(configFile=modelParamFile, clockwisePrecession=dPar.clockwisePrecession, temperature=dPar.temperature)
     aPar = params.AlgoParams(configFile=algoParamFile)
 
     if mPar.nFAC > 0:
@@ -131,18 +130,18 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
         mPar = replace(mPar, nFAC=0, relAmps=None)
         mPar.pass2 = mPar2
 
-    print(f'B0 = {dPar['B0']:.2f}')
-    print(f'N = {dPar['N']}')
-    print(f't1/dt = {dPar['t1']*1000:.2f}/{dPar['dt']*1000:.2f} msec')
-    print(f'nx,ny,nz = {dPar['nx']},{dPar['ny']},{dPar['nz']}')
-    print(f'dx,dy,dz = {dPar['dx']:.2f},{dPar['dy']:.2f},{dPar['dz']:.2f}')
+    print(f'B0 = {dPar.B0:.2f}')
+    print(f'N = {dPar.N}')
+    print(f't1/dt = {dPar.t1*1000:.2f}/{dPar.dt*1000:.2f} msec')
+    print(f'nx,ny,nz = {dPar.nx},{dPar.ny},{dPar.nz}')
+    print(f'dx,dy,dz = {dPar.dx:.2f},{dPar.dy:.2f},{dPar.dz:.2f}')
 
     # Run fat/water processing and save output
-    if aPar.use3D or len(dPar['sliceList']) == 1:
-        if 'slabs' in dPar:
-            for iSlab, (slices, z) in enumerate(dPar['slabs']):
-                print(f'Processing slab {iSlab+1}/{len(dPar['slabs'])} (slices {slices[0]+1}-{slices[-1]+1})...')
-                slabDataParams = config.getSlabDataParams(dPar, slices, z)
+    if aPar.use3D or len(dPar.sliceList) == 1:
+        if hasattr(dPar, 'slabs'):
+            for iSlab, (slices, z) in enumerate(dPar.slabs):
+                print(f'Processing slab {iSlab+1}/{len(dPar.slabs)} (slices {slices[0]+1}-{slices[-1]+1})...')
+                slabDataParams = replace(dPar, sliceList=slices, img=dPar.img[:, z:z+len(slices), :, :], nz=len(slices))
                 output = reconstruct(slabDataParams, aPar, mPar)
                 save(output, slabDataParams) # save data slab-wise to save memory
         else:
@@ -150,8 +149,8 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
             save(output, dPar)
     else:
         output = []
-        for z, slice in enumerate(dPar['sliceList']):
-            print(f'Processing slice {slice+1} ({z+1}/{len(dPar['sliceList'])})...')
-            sliceDataParams = config.getSliceDataParams(dPar, slice, z)
+        for z, slice in enumerate(dPar.sliceList):
+            print(f'Processing slice {slice+1} ({z+1}/{len(dPar.sliceList)})...')
+            sliceDataParams = replace(dPar, sliceList=[slice], img=dPar.img[:, z, :, :], nz=1)
             output.append(reconstruct(sliceDataParams, aPar, mPar))
         save(mergeOutputSlices(output), dPar)

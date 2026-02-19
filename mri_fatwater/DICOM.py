@@ -190,16 +190,16 @@ def getSOPInstanceUID():
 
 
 def getSeriesInstanceUID(dPar, seriesDescription):
-    if 'seriesInstanceUIDs' not in dPar:
-        dPar['seriesInstanceUIDs'] = {}
-    if seriesDescription not in dPar['seriesInstanceUIDs']:
-        dPar['seriesInstanceUIDs'][seriesDescription] = getSOPInstanceUID() + ".0.0.0"
-    return dPar['seriesInstanceUIDs'][seriesDescription]
+    if not hasattr(dPar, 'seriesInstanceUIDs'):
+        dPar.seriesInstanceUIDs = {}
+    if seriesDescription not in dPar.seriesInstanceUIDs:
+        dPar.seriesInstanceUIDs[seriesDescription] = getSOPInstanceUID() + ".0.0.0"
+    return dPar.seriesInstanceUIDs[seriesDescription]
 
 
 # update dPar with info retrieved from the DICOM files including image data
 def updateDataParams(dPar, files):
-    dPar['fileType'] = 'DICOM'
+    dPar.fileType = 'DICOM'
     frameList = []
     for file in files:
         ds = pydicom.dcmread(str(file), stop_before_pixels=True)
@@ -219,49 +219,49 @@ def updateDataParams(dPar, files):
     frameList.sort(key=lambda tags: tags[4])  # Third, sort on slice location
 
     type = getType(frameList, True)
-    dPar['dx'] = float(frameList[0][8][1])
-    dPar['dy'] = float(frameList[0][8][0])
-    dPar['dz'] = float(frameList[0][9])
+    dPar.dx = float(frameList[0][8][1])
+    dPar.dy = float(frameList[0][8][0])
+    dPar.dz = float(frameList[0][9])
 
-    dPar['B0'] = frameList[0][5]/GYRO
+    dPar.B0 = frameList[0][5]/GYRO
     # [msec]->[sec]
     echoTimes = sorted(set([float(tags[3])/1000. for tags in frameList]))
-    dPar['totalN'] = len(echoTimes)
-    if 'echoes' not in dPar:
-        dPar['echoes'] = range(dPar['totalN'])
-    echoTimes = [echoTimes[echo] for echo in dPar['echoes']]
-    dPar['N'] = len(dPar['echoes'])
-    if dPar['N'] < 2:
-        raise Exception(f'At least 2 echoes required, only {dPar['N']} given')
-    dPar['t1'] = echoTimes[0]
-    dPar['dt'] = np.mean(np.diff(echoTimes))
-    if np.max(np.diff(echoTimes))/dPar['dt'] > 1.05 or \
-       np.min(np.diff(echoTimes))/dPar['dt'] < .95:
+    dPar.totalN = len(echoTimes)
+    if not hasattr(dPar, 'echoes'):
+        dPar.echoes = range(dPar.totalN)
+    echoTimes = [echoTimes[echo] for echo in dPar.echoes]
+    dPar.N = len(dPar.echoes)
+    if dPar.N < 2:
+        raise Exception(f'At least 2 echoes required, only {dPar.N} given')
+    dPar.t1 = echoTimes[0]
+    dPar.dt = np.mean(np.diff(echoTimes))
+    if np.max(np.diff(echoTimes))/dPar.dt > 1.05 or \
+       np.min(np.diff(echoTimes))/dPar.dt < .95:
         print('Warning: echo inter-spacing varies more than 5%')
         print(echoTimes)
     nSlices = len(set([tags[4] for tags in frameList]))
-    if 'sliceList' not in dPar:
-        dPar['sliceList'] = range(nSlices)
+    if len(dPar.sliceList)==0:
+        dPar.sliceList = range(nSlices)
 
-    dPar['nx'] = frameList[0][6]
-    dPar['ny'] = frameList[0][7]
-    dPar['nz'] = len(dPar['sliceList'])
+    dPar.nx = frameList[0][6]
+    dPar.ny = frameList[0][7]
+    dPar.nz = len(dPar.sliceList)
 
-    if 'cropFOV' in dPar:
-        x1, x2 = dPar['cropFOV'][0], dPar['cropFOV'][1]
-        y1, y2 = dPar['cropFOV'][2], dPar['cropFOV'][3]
-        dPar['Nx'], dPar['nx'] = dPar['nx'], x2-x1
-        dPar['Ny'], dPar['ny'] = dPar['ny'], y2-y1
+    if hasattr(dPar, 'cropFOV'):
+        x1, x2 = dPar.cropFOV[0], dPar.cropFOV[1]
+        y1, y2 = dPar.cropFOV[2], dPar.cropFOV[3]
+        dPar.Nx, dPar.nx = dPar.nx, x2-x1
+        dPar.Ny, dPar.ny = dPar.ny, y2-y1
     else:
-        x1, x2 = 0, dPar['nx']
-        y1, y2 = 0, dPar['ny']
+        x1, x2 = 0, dPar.nx
+        y1, y2 = 0, dPar.ny
     img = []
     if multiframe:
         file = frameList[0][0]
         dcm = pydicom.dcmread(str(file))
-    for n in dPar['echoes']:
-        for slice in dPar['sliceList']:
-            i = (dPar['N']*slice+n)*len(type)
+    for n in dPar.echoes:
+        for slice in dPar.sliceList:
+            i = (dPar.N*slice+n)*len(type)
             if type == 'MP':  # Magnitude/phase images
                 magnFrame = i
                 phaseFrame = i+1
@@ -327,8 +327,8 @@ def updateDataParams(dPar, files):
             else:
                 raise Exception('Unknown image types')
             img.append(c)
-    dPar['frameList'] = frameList
-    dPar['img'] = np.array(img, shape=(dPar['N'], dPar['nz'], dPar['ny'], dPar['nx'])) * dPar['reScale']
+    dPar.frameList = frameList
+    dPar.img = np.array(img, shape=(dPar.N, dPar.nz, dPar.ny, dPar.nx)) * dPar.reScale
 
 
 # Set window so that percentile % of pixels are inside
@@ -384,15 +384,15 @@ def saveSeries(outDir, imgType, img, dPar):
     
     seriesInstanceUID = getSeriesInstanceUID(dPar, seriesDescription)
     # Single file is interpreted as multi-frame
-    multiframe = dPar['frameList'] and \
-        len(set([frame[0] for frame in dPar['frameList']])) == 1
+    multiframe = dPar.frameList and \
+        len(set([frame[0] for frame in dPar.frameList])) == 1
     if multiframe:
-        ds = pydicom.dcmread(str(dPar['frameList'][0][0]))
-        imVol = np.empty([dPar['nz'], dPar['ny']*dPar['nx']], dtype='uint16')
+        ds = pydicom.dcmread(str(dPar.frameList[0][0]))
+        imVol = np.empty([dPar.nz, dPar.ny*dPar.nx], dtype='uint16')
         frames = []
-    if dPar['frameList']:
-        DICOMimgType = getType(dPar['frameList'])
-    for z, slice in enumerate(dPar['sliceList']):
+    if dPar.frameList:
+        DICOMimgType = getType(dPar.frameList)
+    for z, slice in enumerate(dPar.sliceList):
         filename = outDir / f'{slice}.dcm'
         # Extract slice, scale and type cast pixel data
         pixelData = np.array([max(0, (val-reScaleIntercept)/reScaleSlope)
@@ -401,9 +401,9 @@ def saveSeries(outDir, imgType, img, dPar):
         # Set window so that 95% of pixels are inside
         windowCenter, windowWidth = getPercentileWindow(
                                             pixelData, reScaleIntercept, reScaleSlope, 95)
-        if dPar['frameList']:
+        if dPar.frameList:
             # Get frame
-            frame = dPar['frameList'][dPar['totalN']*slice*len(DICOMimgType)]
+            frame = dPar.frameList[dPar.totalN*slice*len(DICOMimgType)]
             iFrame = frame[1]
             if not multiframe:
                 ds = pydicom.dcmread(str(frame[0]))
@@ -436,8 +436,8 @@ def saveSeries(outDir, imgType, img, dPar):
             ds.Rows = img.shape[0]
             setTagValue(ds, 'Study Instance UID',
                         getSOPInstanceUID(), iFrame, 'UI')
-            setTagValue(ds, 'Pixel Spacing', [dPar['dx'], dPar['dy']], iFrame, 'DS')
-            setTagValue(ds, 'Pixel Aspect Ratio', [int(dPar['dx']*100), int(dPar['dy']*100)], iFrame, 'IS')
+            setTagValue(ds, 'Pixel Spacing', [dPar.dx, dPar.dy], iFrame, 'DS')
+            setTagValue(ds, 'Pixel Aspect Ratio', [int(dPar.dx*100), int(dPar.dy*100)], iFrame, 'IS')
         # Change/add DICOM tags:
         setTagValue(ds, 'SOP Instance UID', getSOPInstanceUID(), iFrame, 'UI')
         setTagValue(ds, 'Series Instance UID', seriesInstanceUID, iFrame, 'UI')
@@ -472,7 +472,7 @@ def saveSeries(outDir, imgType, img, dPar):
 # Save all data in output as DICOM images
 def save(output, dPar):
     for seriesType in output:
-        outDir = dPar['outDir'] / seriesType
+        outDir = dPar.outDir / seriesType
         outDir.mkdir(parents=True, exist_ok=True)
-        print(f'Writing image{'s' if dPar['nz']>1 else ''} to "{outDir}"')
+        print(f'Writing image{'s' if dPar.nz>1 else ''} to "{outDir}"')
         saveSeries(outDir, seriesType, output[seriesType], dPar)

@@ -2,7 +2,8 @@ from dataclasses import dataclass, field, fields, replace
 import yaml
 import numpy as np
 from typing import Optional
-
+from pathlib import Path
+from mri_fatwater import DICOM, MATLAB
 
 def init_dataclass(dataclass_instance, configFile, **overrides):
     params = {f.name: f.default for f in fields(dataclass_instance) if f.init}
@@ -23,6 +24,63 @@ def init_dataclass(dataclass_instance, configFile, **overrides):
         else:
             raise Exception(f'Unknown parameter "{param}" passed to {type(dataclass_instance).__name__} constructor' + (f' (from config file {configFile})' if param not in overrides else ''))
 
+
+@dataclass
+class DataParams:
+    reScale: float = 1.0
+    temperature: Optional[float] = None
+    clockwisePrecession: bool = False
+    offresCenter: float = 0.
+    files: tuple[str, ...] = ()
+    dirs: tuple[str, ...] = ()
+    sliceList: tuple[int, ...] = ()
+    outDir: Optional[str] = None
+
+    configFile: Optional[str] = field(default=None, repr=False)
+
+    def __init__(self, configFile: Optional[str] = None, **overrides):
+        init_dataclass(self, configFile, **overrides)
+
+        if self.outDir is None:
+            raise ValueError('No outDir defined')
+
+        filepath = self.configFile.parent if self.configFile else None
+
+        if len(self.files) > 0:
+            self.files = [filepath / file for file in list(self.files) if Path(filepath / file).is_file()]
+        
+        if len(self.dirs) > 0:
+            self.dirs = [filepath / dir for dir in list(self.dirs) if Path(filepath / dir).is_dir()]
+            for path in self.dirs:
+                self.files += [obj for obj in path.iterdir() if obj.is_file()]
+        
+        validFiles = DICOM.getValidFiles(self.files)
+        
+        if validFiles:
+            DICOM.updateDataParams(self, validFiles)
+        else:
+            if len(self.files) == 1 and self.files[0].suffix == '.mat':
+                MATLAB.updateDataParams(self, self.files[0])
+            else:
+                raise Exception('No valid files found')
+        
+        if hasattr(self, 'reconSlab'):
+            self.slabs = self.getSlabs(self.sliceList, self.reconSlab)
+    
+    def getSlabs(self, sliceList, reconSlab):
+        slabs = []
+        slices = []
+        pos = 0
+        for z, slice in enumerate(sliceList):
+            # start a new slab
+            if slices and (len(slices) == reconSlab or not slice == slices[-1]+1):
+                slabs.append((slices, pos))
+                slices = [slice]
+                pos = z
+            else:
+                slices.append(slice)
+        slabs.append((slices, pos))
+        return slabs
 
 @dataclass
 class ModelParams:
