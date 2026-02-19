@@ -5,15 +5,38 @@ from typing import Optional
 from pathlib import Path
 from mri_fatwater import DICOM, MATLAB
 
+
+def read_config_file(config_file):
+    if config_file:
+        with open(config_file, 'r') as f:
+            try:
+                return yaml.safe_load(f)
+            except yaml.YAMLError as exc:
+                raise Exception(f'Error reading config file {f}') from exc
+    else:
+        return {}
+
+
+# dataclass parameters are set with increasing priority: 
+# 1. defaults
+# 2. metadata from data files specified in config file
+# 3. config file parameters
+# 4. excplicit overrides
 def init_dataclass(dataclass_instance, configFile, **overrides):
     params = {f.name: f.default for f in fields(dataclass_instance) if f.init}
 
-    if configFile:
-        with open(configFile, 'r') as f:
-            try:
-                params.update(yaml.safe_load(f))
-            except yaml.YAMLError as exc:
-                raise Exception(f'Error reading config file {f}') from exc
+    config_data = read_config_file(configFile)
+
+    if type(dataclass_instance).__name__ == 'DataParams':
+        data_files = overrides.get('files', config_data.get('files', []))
+        data_dirs = overrides.get('dirs', config_data.get('dirs', []))
+        filepath = overrides.get('filepath', config_data.get('filepath', configFile.parent if configFile else './'))
+
+        if data_files or data_dirs:
+            data = load_data(data_files, data_dirs, filepath)
+            params.update(data)
+
+    params.update(config_data)
 
     params.update(overrides)
     params['configFile'] = configFile
@@ -22,50 +45,96 @@ def init_dataclass(dataclass_instance, configFile, **overrides):
         if hasattr(dataclass_instance, param):
             setattr(dataclass_instance, param, params[param])
         else:
-            raise Exception(f'Unknown parameter "{param}" passed to {type(dataclass_instance).__name__} constructor' + (f' (from config file {configFile})' if param not in overrides else ''))
+            msg = f'Unknown parameter "{param}" passed to {type(dataclass_instance).__name__} constructor'
+            if param not in overrides:
+                if param in config_data:
+                    msg += f' (from config file {configFile})'
+                elif param in data:
+                    msg += f' (from data file(s) {data_files} and/or data dirs {data_dirs})'
+            raise Exception(msg)
+
+
+def load_data(data_files, data_dirs, base_path):
+
+    if len(data_files) > 0:
+        data_files = [base_path / file for file in list(data_files) if Path(base_path / file).is_file()]
+    
+    if len(data_dirs) > 0:
+        data_dirs = [base_path / dir for dir in list(data_dirs) if Path(base_path / dir).is_dir()]
+        for path in data_dirs:
+            data_files += [obj for obj in path.iterdir() if obj.is_file()]
+    
+    valid_DICOM_files = DICOM.getValidFiles(data_files)
+    
+    if valid_DICOM_files:
+        return DICOM.readData(valid_DICOM_files)
+    elif len(data_files) == 1 and data_files[0].suffix == '.mat':
+        return MATLAB.readISMRMchallengeData(data_files[0])
+    else:
+        raise Exception('No valid files found')
 
 
 @dataclass
 class DataParams:
-    reScale: float = 1.0
+    img: Optional[np.ndarray] = field(default=None, repr=False)
+    t: tuple[float, ...] = field(default=None) # [sec] dephasing times (=TE for gradient echo)
+    B0: float = 3.0 # [T]
+    dx: float = 1.5 # [mm] TODO: consider voxelsize tuple instead
+    dy: float = 1.5 # [mm]
+    dz: float = 5.0 # [mm]
+
     temperature: Optional[float] = None
-    clockwisePrecession: bool = False
-    offresCenter: float = 0.
-    files: tuple[str, ...] = ()
-    dirs: tuple[str, ...] = ()
-    sliceList: tuple[int, ...] = ()
-    outDir: Optional[str] = None
+    offresCenter: int = 0 # TODO: units of Hz instead of index
+    clockwisePrecession: bool = True # TODO: maybe handle differently
+    reScale: float = 1.0 # TODO: handle differently
+    files: tuple[str, ...] = field(default=(), repr=False) # TODO: handle outside class
+    dirs: tuple[str, ...] = field(default=(), repr=False) # TODO: handle outside class
+    sliceList: tuple[int, ...] = field(default=(), repr=False) # TODO: handle outside class
+    fileType: Optional[str] = field(default=None, repr=False) # TODO: handle outside class
+    outDir: Optional[str] = field(default=None, repr=False) # TODO: handle outside class
 
     configFile: Optional[str] = field(default=None, repr=False)
 
     def __init__(self, configFile: Optional[str] = None, **overrides):
         init_dataclass(self, configFile, **overrides)
-
-        if self.outDir is None:
-            raise ValueError('No outDir defined')
-
-        filepath = self.configFile.parent if self.configFile else None
-
-        if len(self.files) > 0:
-            self.files = [filepath / file for file in list(self.files) if Path(filepath / file).is_file()]
-        
-        if len(self.dirs) > 0:
-            self.dirs = [filepath / dir for dir in list(self.dirs) if Path(filepath / dir).is_dir()]
-            for path in self.dirs:
-                self.files += [obj for obj in path.iterdir() if obj.is_file()]
-        
-        validFiles = DICOM.getValidFiles(self.files)
-        
-        if validFiles:
-            DICOM.updateDataParams(self, validFiles)
-        else:
-            if len(self.files) == 1 and self.files[0].suffix == '.mat':
-                MATLAB.updateDataParams(self, self.files[0])
-            else:
-                raise Exception('No valid files found')
         
         if hasattr(self, 'reconSlab'):
             self.slabs = self.getSlabs(self.sliceList, self.reconSlab)
+        
+        self.img *= self.reScale
+
+        if self.N < 2:
+            raise Exception(f'At least two echoes required, only {self.N} found')
+        
+        if self.outDir is None:
+            raise ValueError('No outDir defined')
+    
+    @property
+    def N(self):
+        return len(self.t)
+    
+    @property
+    def nz(self):
+        return self.img.shape[1]
+    
+    @property
+    def ny(self):
+        return self.img.shape[2]
+    
+    @property
+    def nx(self):
+        return self.img.shape[3]
+    
+    @property
+    def t1(self):
+        return self.t[0]
+    
+    @property
+    def dt(self):
+        dt = np.diff(self.t)
+        if np.max(dt)/np.min(dt) > 1.1:
+            raise ValueError(f'Varying inter-echo spacing for t={self.t}')
+        return np.mean(dt)
     
     def getSlabs(self, sliceList, reconSlab):
         slabs = []
@@ -95,7 +164,7 @@ class ModelParams:
 
     configFile: Optional[str] = field(default=None, repr=False)
 
-    def __init__(self, configFile: Optional[str] = None, clockwisePrecession=False, temperature=None, **overrides):
+    def __init__(self, configFile: Optional[str] = None, clockwisePrecession=True, temperature=None, **overrides):
         init_dataclass(self, configFile, **overrides)
         
         if self.nFAC > 0:
@@ -110,7 +179,7 @@ class ModelParams:
             self.watCS = 1.3 + 3.748 -.01085 * temperature # Temp in [°C]
 
         self.CS = np.array([self.watCS] + self.fatCS, dtype=np.float32)
-        if clockwisePrecession:
+        if not clockwisePrecession:
             self.CS *= -1
         
         self.M = 2 + self.nFAC # Number of linear components

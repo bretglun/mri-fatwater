@@ -2,76 +2,39 @@ import scipy.io
 import numpy as np
 
 
-# update dPar with information retrieved from MATLAB file
-# (arranged according to ISMRM fat-water toolbox)
-def updateDataParams(dPar, file):
-    dPar.fileType = 'MATLAB'
-    mat = scipy.io.loadmat(file)
-    data = mat['imDataParams'][0, 0]
+def readISMRMchallengeData(file):
+    data_params = {'fileType': 'MATLAB'}
 
+    data = scipy.io.loadmat(file)['imDataParams'][0, 0]
     for i in range(0, 4):
         if len(data[i].shape) == 5:
-            img = data[i]  # Image data (row,col,slice,coil,echo)
+            data_params['img'] = data[i] # Image data (row, col, slice, coil, echo)
         elif data[i].shape[1] > 2:
-            echoTimes = data[i][0]  # TEs [sec]
+            data_params['t'] = data[i][0] # Dephasing times [sec]
         else:
             if data[i][0, 0] > 1:
-                dPar.B0 = data[i][0, 0]  # Fieldstrength [T]
+                data_params['B0'] = float(data[i][0, 0]) # Fieldstrength [T]
             else:
-                clockwise = data[i][0, 0]  # Clockwiseprecession?
+                data_params['clockwisePrecession'] = bool(data[i][0, 0])
+    
+    if 'img' not in data_params:
+        raise ValueError('Could not read all required parameters from MATLAB file')
 
-    if clockwise != 1:
-        raise Exception('Warning: Not clockwise precession. ' +
-                        'Need to write code to handle this case!')
+    if data_params['img'].shape[3] > 1:
+        raise NotImplementedError('Multiple coil elements not supported yet')
+    
+    data_params['img'] = data_params['img'][:, :, :, 0, :] # Ignore coil dimension
 
-    dPar.ny, dPar.nx, dPar.nz, nCoils, dPar.N = img.shape
-    if nCoils > 1:
-        raise Exception('Warning: more than one coil. ' +
-                        'Need to write code to coil combine!')
+    # To get data as: (echo, slice, row, col)
+    data_params['img'] = np.transpose(data_params['img'])
+    data_params['img'] = np.swapaxes(data_params['img'], 2, 3)
 
-    # Get only slices in dPar.sliceList
-    if len(dPar.sliceList)==0:
-        dPar.sliceList = range(dPar.nz)
-    else:
-        img = img[:, :, dPar.sliceList, :, :]
-        dPar.nz = len(dPar.sliceList)
-    # Get only echoes in dPar.echoes
-    dPar.totalN = dPar.N
-    if not hasattr(dPar, 'echoes'):
-        dPar.echoes = range(dPar.totalN)
-    else:
-        img = img[:, :, :, :, dPar.echoes]
-        echoTimes = echoTimes[dPar.echoes]
-        dPar.N = len(dPar.echoes)
-    if hasattr(dPar, 'cropFOV'):
-        x0, x1 = dPar.cropFOV[0], dPar.cropFOV[1]
-        y0, y1 = dPar.cropFOV[2], dPar.cropFOV[3]
-        dPar.Nx, dPar.nx = dPar.nx, x1-x0
-        dPar.Ny, dPar.ny = dPar.ny, y1-y0
-        img = img[y0:y1, x0:x1, :, :, :]
-    if dPar.N < 2:
-        raise Exception(f'At least 2 echoes required, only {dPar.N} given')
-    dPar.t1 = echoTimes[0]
-    dPar.dt = np.mean(np.diff(echoTimes))
-    if np.max(np.diff(echoTimes))/dPar.dt > 1.05 or np.min(
-      np.diff(echoTimes))/dPar.dt < .95:
-        raise Exception('Warning: echo inter-spacing varies more than 5%')
-
-    dPar.frameList = []
-
-    dPar.dx, dPar.dy, dPar.dz = 1.5, 1.5, 5  # Ad hoc assumption on voxelsize
-
-    # To get data as: (echo,slice,row,col)
-    img.shape = (dPar.ny, dPar.nx, dPar.nz, dPar.N)
-    img = np.transpose(img)
-    img = np.swapaxes(img, 2, 3)
-
-    dPar.img = img*dPar.reScale
+    return data_params
 
 
 # Save output as MATLAB arrays
 def save(output, dPar):
     dPar.outDir.mkdir(parents=True, exist_ok=True)
-    filename = dPar.outDir / f'{dPar.sliceList[0]}.mat'
+    filename = dPar.outDir / f'{dPar.sliceList[0] if len(dPar.sliceList)>0 else 0}.mat'
     print(f'Writing images to "{filename}"')
     scipy.io.savemat(filename, output)

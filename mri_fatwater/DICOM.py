@@ -197,6 +197,10 @@ def getSeriesInstanceUID(dPar, seriesDescription):
     return dPar.seriesInstanceUIDs[seriesDescription]
 
 
+def readData(files):
+    raise NotImplementedError('Reading DICOM files not adapted to new program structure. Will be adapted from updateDataParams function.')
+
+
 # update dPar with info retrieved from the DICOM files including image data
 def updateDataParams(dPar, files):
     dPar.fileType = 'DICOM'
