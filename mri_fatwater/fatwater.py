@@ -130,12 +130,12 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
         mPar = replace(mPar, nFAC=0, relAmps=None)
         mPar.pass2 = mPar2
 
-    print(f'B0 = {dPar.B0:.2f}')
-    print(f'N = {dPar.N}')
-    print(f't1/dt = {dPar.t1*1000:.2f}/{dPar.dt*1000:.2f} msec')
-    print(f'nx,ny,nz = {dPar.nx},{dPar.ny},{dPar.nz}')
-    print(f'dx,dy,dz = {dPar.dx:.2f},{dPar.dy:.2f},{dPar.dz:.2f}')
-
+    print(dPar)
+    print(f't = {' / '.join(f'{t*1e3:.2f}' for t in dPar.t)} msec')
+    print(f'(nx, ny, nz) = {dPar.img.shape[-1:0:-1]}')
+    print(mPar)
+    print(aPar)
+    
     # Run fat/water processing and save output
     if aPar.use3D or len(dPar.sliceList) == 1:
         if hasattr(dPar, 'slabs'):
