@@ -135,22 +135,15 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     print(f'(nx, ny, nz) = {dPar.img.shape[-1:0:-1]}')
     print(mPar)
     print(aPar)
-    
+
     # Run fat/water processing and save output
-    if aPar.use3D or len(dPar.sliceList) == 1:
-        if hasattr(dPar, 'slabs'):
-            for iSlab, (slices, z) in enumerate(dPar.slabs):
-                print(f'Processing slab {iSlab+1}/{len(dPar.slabs)} (slices {slices[0]+1}-{slices[-1]+1})...')
-                slabDataParams = replace(dPar, sliceList=slices, img=dPar.img[:, z:z+len(slices), :, :], nz=len(slices))
-                output = reconstruct(slabDataParams, aPar, mPar)
-                save(output, slabDataParams) # save data slab-wise to save memory
-        else:
-            output = reconstruct(dPar, aPar, mPar)
-            save(output, dPar)
+    if aPar.use3D or dPar.nz == 1:
+        output = reconstruct(dPar, aPar, mPar)
+        save(output, dPar)
     else:
         output = []
-        for z, slice in enumerate(dPar.sliceList):
-            print(f'Processing slice {slice+1} ({z+1}/{len(dPar.sliceList)})...')
-            sliceDataParams = replace(dPar, sliceList=[slice], img=dPar.img[:, z, :, :], nz=1)
+        for slice in range(dPar.nz):
+            print(f'Processing slice {slice+1}/{dPar.nz}...')
+            sliceDataParams = replace(dPar, sliceList=[slice])
             output.append(reconstruct(sliceDataParams, aPar, mPar))
         save(mergeOutputSlices(output), dPar)

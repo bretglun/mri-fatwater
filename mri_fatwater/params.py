@@ -41,6 +41,23 @@ def init_dataclass(dataclass_instance, configFile, **overrides):
     params.update(overrides)
     params['configFile'] = configFile
 
+    if type(dataclass_instance).__name__ == 'DataParams':
+        if 'img' not in params or not isinstance(params['img'], np.ndarray) or params['img'].ndim != 4:
+            raise ValueError('DataParams requires a 4D numpy array "img" with dimensions (N, nz, ny, nx)')
+        if len(params['t']) != params['img'].shape[0]:
+            raise ValueError(f'Number of time shifts ({len(params['t'])}) does not match number of echoes in data ({params['img'].shape[0]})')
+        if 'echoes' in params:
+            echoes = params.pop('echoes')
+            if any(echo not in range(len(params['t'])) for echo in echoes):
+                raise ValueError(f'Echo indices must be over 0 and smaller than {params['img'].shape[0]} (number of echoes in data)')
+            params['t'] = tuple(params['t'][i] for i in echoes)
+            params['img'] = params['img'][echoes, ...]
+        if 'sliceList' in params:
+            sliceList = params.pop('sliceList')
+            if any(slice not in range(params['img'].shape[1]) for slice in sliceList):
+                raise ValueError(f'Slice indices must be over 0 and smaller than {params['img'].shape[1]} (number of slices in data)')
+            params['img'] = params['img'][:, sliceList, ...]
+
     for param in params:
         if hasattr(dataclass_instance, param):
             setattr(dataclass_instance, param, params[param])
@@ -87,9 +104,8 @@ class DataParams:
     offresCenter: int = 0 # TODO: units of Hz instead of index
     clockwisePrecession: bool = True # TODO: maybe handle differently
     reScale: float = 1.0 # TODO: handle differently
-    files: tuple[str, ...] = field(default=(), repr=False) # TODO: handle outside class
-    dirs: tuple[str, ...] = field(default=(), repr=False) # TODO: handle outside class
-    sliceList: tuple[int, ...] = field(default=(), repr=False) # TODO: handle outside class
+    files: tuple[str, ...] = field(default=(), repr=False)
+    dirs: tuple[str, ...] = field(default=(), repr=False)
     fileType: Optional[str] = field(default=None, repr=False) # TODO: handle outside class
     outDir: Optional[str] = field(default=None, repr=False) # TODO: handle outside class
 
@@ -97,9 +113,6 @@ class DataParams:
 
     def __init__(self, configFile: Optional[str] = None, **overrides):
         init_dataclass(self, configFile, **overrides)
-        
-        if hasattr(self, 'reconSlab'):
-            self.slabs = self.getSlabs(self.sliceList, self.reconSlab)
         
         self.img *= self.reScale
 
@@ -135,21 +148,7 @@ class DataParams:
         if np.max(dt)/np.min(dt) > 1.1:
             raise ValueError(f'Varying inter-echo spacing for t={self.t}')
         return np.mean(dt)
-    
-    def getSlabs(self, sliceList, reconSlab):
-        slabs = []
-        slices = []
-        pos = 0
-        for z, slice in enumerate(sliceList):
-            # start a new slab
-            if slices and (len(slices) == reconSlab or not slice == slices[-1]+1):
-                slabs.append((slices, pos))
-                slices = [slice]
-                pos = z
-            else:
-                slices.append(slice)
-        slabs.append((slices, pos))
-        return slabs
+
 
 @dataclass
 class ModelParams:

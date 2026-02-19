@@ -35,6 +35,6 @@ def readISMRMchallengeData(file):
 # Save output as MATLAB arrays
 def save(output, dPar):
     dPar.outDir.mkdir(parents=True, exist_ok=True)
-    filename = dPar.outDir / f'{dPar.sliceList[0] if len(dPar.sliceList)>0 else 0}.mat'
+    filename = dPar.outDir / '0.mat'
     print(f'Writing images to "{filename}"')
     scipy.io.savemat(filename, output)
