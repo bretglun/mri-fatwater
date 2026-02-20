@@ -116,7 +116,7 @@ def reconstruct(dPar, aPar, mPar):
 def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
     # Read configuration files
     dPar = params.DataParams(dataParamFile, outDir=outDir)
-    mPar = params.ModelParams(configFile=modelParamFile, clockwisePrecession=dPar.clockwisePrecession, temperature=dPar.temperature)
+    mPar = params.ModelParams(configFile=modelParamFile, temperature=dPar.temperature)
     aPar = params.AlgoParams(configFile=algoParamFile)
 
     if mPar.nFAC > 0:

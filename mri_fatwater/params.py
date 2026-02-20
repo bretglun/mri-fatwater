@@ -68,6 +68,10 @@ def init_dataclass(dataclass_instance, configFile, **overrides):
             if params['crop'][0] < 0 or params['crop'][1] < 0 or params['crop'][2] < 0 or params['crop'][3] > params['img'].shape[3] or params['crop'][4] > params['img'].shape[2] or params['crop'][5] > params['img'].shape[1]:
                 raise ValueError(f'Param "crop" values must be within the image dimensions (nx={params['img'].shape[3]}, ny={params['img'].shape[2]}, nz={params['img'].shape[1]})')
             params['img'] = params['img'][:, params['crop'][2]:params['crop'][5], params['crop'][1]:params['crop'][4], params['crop'][0]:params['crop'][3]]
+        if 'clockwisePrecession' in params:
+            clockwisePrecession = params.pop('clockwisePrecession')
+            if not clockwisePrecession:
+                np.conjugate(params['img'], out=params['img'])
 
     for param in params:
         if hasattr(dataclass_instance, param):
@@ -116,7 +120,6 @@ class DataParams:
 
     temperature: Optional[float] = None
     offresCenter: int = 0 # TODO: units of Hz instead of index
-    clockwisePrecession: bool = True # TODO: maybe handle differently
     reScale: float = 1.0 # TODO: handle differently
     files: tuple[str, ...] = field(default=(), repr=False)
     dirs: tuple[str, ...] = field(default=(), repr=False)
@@ -177,7 +180,7 @@ class ModelParams:
 
     configFile: Optional[str] = field(default=None, repr=False)
 
-    def __init__(self, configFile: Optional[str] = None, clockwisePrecession=True, temperature=None, **overrides):
+    def __init__(self, configFile: Optional[str] = None, temperature=None, **overrides):
         init_dataclass(self, configFile, **overrides)
         
         if self.nFAC > 0:
@@ -192,8 +195,6 @@ class ModelParams:
             self.watCS = 1.3 + 3.748 -.01085 * temperature # Temp in [°C]
 
         self.CS = np.array([self.watCS] + self.fatCS, dtype=np.float32)
-        if not clockwisePrecession:
-            self.CS *= -1
         
         self.M = 2 + self.nFAC # Number of linear components
         self.P = len(self.CS) # Number of resonance peaks
