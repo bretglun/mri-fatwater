@@ -4,16 +4,14 @@ from mri_fatwater import algorithm, params, DICOM, MATLAB
 from .constants import EPSILON
 
 
-# Zero pad back any cropped FOV
-def padCropped(croppedImage, dPar):
-    if hasattr(dPar, 'cropFOV'):
-        image = np.zeros((dPar.nz, dPar.Ny, dPar.Nx))
-        x1, x2 = dPar.cropFOV[0], dPar.cropFOV[1]
-        y1, y2 = dPar.cropFOV[2], dPar.cropFOV[3]
-        image[:, y1:y2, x1:x2] = croppedImage
-        return image
+# Zero pad cropped data to original shape if prescribed
+def padCropped(data, dPar):
+    if dPar.pad:
+        nz, ny, nx = dPar.original_shape
+        x0, y0, z0, x1, y1, z1 = dPar.crop
+        return np.pad(data, ((z0, nz-z1), (y0, ny-y1), (x0, nx-x1)))
     else:
-        return croppedImage
+        return data
 
 
 def save(output, dPar):

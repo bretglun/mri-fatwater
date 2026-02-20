@@ -5,6 +5,6 @@ reScale: 0.0001 # Rescaling might be needed for datasets with too small/large pi
 sliceList: [0, 1, 2, 3]
 echoes: [0, 1, 2]
 temperature: 37
-cropFOV: [64, 128, 64, 92] # [x0, x1, y0, y1]
+crop: [64, 64, 0, 128, 92, 4] # [x0, y0, z0, x1, y1, z1]
 clockwisePrecession: False
 offresCenter: 0.

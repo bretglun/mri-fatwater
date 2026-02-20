@@ -57,6 +57,17 @@ def init_dataclass(dataclass_instance, configFile, **overrides):
             if any(slice not in range(params['img'].shape[1]) for slice in sliceList):
                 raise ValueError(f'Slice indices must be over 0 and smaller than {params['img'].shape[1]} (number of slices in data)')
             params['img'] = params['img'][:, sliceList, ...]
+        if params['pad']:
+            if 'crop' not in params or params['crop'] is None:
+                params['pad'] = False
+            else:
+                dataclass_instance.original_shape = params['img'].shape[1:]
+        if 'crop' in params and params['crop'] is not None:
+            if len(params['crop']) != 6:
+                raise ValueError('Param "crop" must be a list of six integers: [x0, y0, z0, x1, y1, z1]')
+            if params['crop'][0] < 0 or params['crop'][1] < 0 or params['crop'][2] < 0 or params['crop'][3] > params['img'].shape[3] or params['crop'][4] > params['img'].shape[2] or params['crop'][5] > params['img'].shape[1]:
+                raise ValueError(f'Param "crop" values must be within the image dimensions (nx={params['img'].shape[3]}, ny={params['img'].shape[2]}, nz={params['img'].shape[1]})')
+            params['img'] = params['img'][:, params['crop'][2]:params['crop'][5], params['crop'][1]:params['crop'][4], params['crop'][0]:params['crop'][3]]
 
     for param in params:
         if hasattr(dataclass_instance, param):
@@ -99,6 +110,9 @@ class DataParams:
     dx: float = 1.5 # [mm] TODO: consider voxelsize tuple instead
     dy: float = 1.5 # [mm]
     dz: float = 5.0 # [mm]
+    
+    crop: Optional[tuple[int, ...]] = None # [x0, y0, z0, x1, y1, z1] (if cropping is desired)
+    pad: bool = True # Whether to zero-pad back to original shape after reconstruction (if cropping was applied)
 
     temperature: Optional[float] = None
     offresCenter: int = 0 # TODO: units of Hz instead of index
