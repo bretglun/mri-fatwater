@@ -8,3 +8,4 @@ graphcut: True
 multiScale: True
 use3D: False
 magnitudeDiscrimination: False
+autocrop: True

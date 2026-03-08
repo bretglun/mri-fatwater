@@ -4,19 +4,9 @@ from mri_fatwater import algorithm, params, DICOM, MATLAB
 from .constants import EPSILON
 
 
-# Zero pad cropped data to original shape if prescribed
-def padCropped(data, dPar):
-    if dPar.pad:
-        nz, ny, nx = dPar.original_shape
-        x0, y0, z0, x1, y1, z1 = dPar.crop
-        return np.pad(data, ((z0, nz-z1), (y0, ny-y1), (x0, nx-x1)))
-    else:
-        return data
-
-
 def save(output, dPar):
     for seriesType in output: # zero pad if was cropped and reshape to row,col,slice
-        output[seriesType] = np.moveaxis(padCropped(output[seriesType].reshape((dPar.nz, dPar.ny, dPar.nx)), dPar), 0, -1)
+        output[seriesType] = np.moveaxis(output[seriesType], 0, -1)
     
     if dPar.fileType == 'DICOM':
         DICOM.save(output, dPar)
@@ -68,8 +58,39 @@ def getFat(rho, alpha):
     return fat
 
 
+def autocrop(dPar):
+    crop = [0] * 6 # [x0, y0, z0, x1, y1, z1]
+    abs_img = np.mean(np.abs(dPar.img), axis=0)
+    threshold = np.percentile(abs_img, 95) * .01
+    
+    for dim in range(3):
+        profile = abs_img.mean(axis=tuple(i for i in range(3) if i != dim))
+        foreground_indices = np.where(profile > threshold)[0]
+        crop[2-dim] = int(foreground_indices[0])
+        crop[5-dim] = int(foreground_indices[-1] + 1)
+    
+    if tuple(crop[:3]) == (0, 0, 0) and tuple(crop[3:]) == abs_img.shape[::-1]:
+        return dPar
+    
+    print(f'Auto-cropping to FOV: [x0, y0, z0, x1, y1, z1] = {crop} ({np.prod([crop[3+i] - crop[i] for i in range(3)])/np.prod(abs_img.shape)*100:.1f}% of original FOV)')
+    return replace(dPar, crop=crop, pad=True)
+
+
+# Zero pad cropped data to original shape if prescribed
+def padCropped(data, dPar):
+    if dPar.pad:
+        nz, ny, nx = dPar.original_shape
+        x0, y0, z0, x1, y1, z1 = dPar.crop
+        return np.pad(data, ((z0, nz-z1), (y0, ny-y1), (x0, nx-x1)))
+    else:
+        return data
+
+
 # Perform fat/water separation and return prescribed output
 def reconstruct(dPar, aPar, mPar):
+
+    if aPar.autocrop and dPar.crop is None:
+        dPar = autocrop(dPar)
 
     # Do the fat/water separation
     rho, B0map, R2map = algorithm.reconstruct(dPar, aPar, mPar)
@@ -109,6 +130,9 @@ def reconstruct(dPar, aPar, mPar):
             output['UD'] = UD
         if 'PUD' in aPar.output:
             output['PUD'] = PUD
+    
+    for seriesType in output:
+        output[seriesType] = padCropped(output[seriesType], dPar)
 
     return output
 

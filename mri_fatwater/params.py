@@ -251,6 +251,7 @@ class AlgoParams:
     magnitudeDiscrimination: bool = False
     offresPenalty: float = 0.
     realEstimates: Optional[bool] = None
+    autocrop: bool = True
 
     configFile: Optional[str] = field(default=None, repr=False)
 
