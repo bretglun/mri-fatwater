@@ -102,6 +102,8 @@ def load_data(data_files, data_dirs, base_path):
         return DICOM.readData(valid_DICOM_files)
     elif len(data_files) == 1 and data_files[0].suffix == '.mat':
         return MATLAB.readISMRMchallengeData(data_files[0])
+    elif len(data_files) == 1 and data_files[0].suffix == '.npy':
+        return {'img': np.load(data_files[0]).transpose()}
     else:
         raise Exception('No valid files found')
 
