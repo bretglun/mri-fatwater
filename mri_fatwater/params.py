@@ -123,8 +123,6 @@ class DataParams:
     reScale: float = 1.0 # TODO: handle differently
     files: tuple[str, ...] = field(default=(), repr=False)
     dirs: tuple[str, ...] = field(default=(), repr=False)
-    fileType: Optional[str] = field(default=None, repr=False) # TODO: handle outside class
-    outDir: Optional[str] = field(default=None, repr=False) # TODO: handle outside class
 
     configFile: Optional[str] = field(default=None, repr=False)
 
@@ -135,9 +133,6 @@ class DataParams:
 
         if self.N < 2:
             raise Exception(f'At least two echoes required, only {self.N} found')
-        
-        if self.outDir is None:
-            raise ValueError('No outDir defined')
     
     @property
     def N(self):

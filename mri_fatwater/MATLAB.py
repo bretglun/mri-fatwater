@@ -3,7 +3,7 @@ import numpy as np
 
 
 def readISMRMchallengeData(file):
-    data_params = {'fileType': 'MATLAB'}
+    data_params = {}
 
     data = scipy.io.loadmat(file)['imDataParams'][0, 0]
     for i in range(0, 4):
@@ -33,8 +33,8 @@ def readISMRMchallengeData(file):
 
 
 # Save output as MATLAB arrays
-def save(output, dPar):
-    dPar.outDir.mkdir(parents=True, exist_ok=True)
-    filename = dPar.outDir / '0.mat'
+def save(output, outdir):
+    outdir.mkdir(parents=True, exist_ok=True)
+    filename = outdir / '0.mat'
     print(f'Writing images to "{filename}"')
     scipy.io.savemat(filename, output)

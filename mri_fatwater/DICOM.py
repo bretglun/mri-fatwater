@@ -474,9 +474,9 @@ def saveSeries(outDir, imgType, img, dPar):
 
 
 # Save all data in output as DICOM images
-def save(output, dPar):
+def save(output, dPar, outdir):
     for seriesType in output:
-        outDir = dPar.outDir / seriesType
-        outDir.mkdir(parents=True, exist_ok=True)
-        print(f'Writing image{'s' if dPar.nz>1 else ''} to "{outDir}"')
-        saveSeries(outDir, seriesType, output[seriesType], dPar)
+        dir = outdir / seriesType
+        dir.mkdir(parents=True, exist_ok=True)
+        print(f'Writing image{'s' if dPar.nz>1 else ''} to "{dir}"')
+        saveSeries(dir, seriesType, output[seriesType], dPar)

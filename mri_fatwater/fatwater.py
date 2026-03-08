@@ -1,19 +1,7 @@
 from dataclasses import replace
 import numpy as np
-from mri_fatwater import algorithm, params, DICOM, MATLAB
+from mri_fatwater import algorithm, params
 from .constants import EPSILON
-
-
-def save(output, dPar):
-    for seriesType in output: # zero pad if was cropped and reshape to row,col,slice
-        output[seriesType] = np.moveaxis(output[seriesType], 0, -1)
-    
-    if dPar.fileType == 'DICOM':
-        DICOM.save(output, dPar)
-    elif dPar.fileType == 'MATLAB':
-        MATLAB.save(output, dPar)
-    else:
-        raise Exception(f'Unknown filetype: {dPar.fileType}')
 
 
 # Merge output for slices reconstructed separately
@@ -137,9 +125,9 @@ def run_pipeline(dPar, aPar, mPar):
     return output
 
 
-def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
+def separate(dataParamFile, algoParamFile, modelParamFile):
     # Read configuration files
-    dPar = params.DataParams(dataParamFile, outDir=outDir)
+    dPar = params.DataParams(dataParamFile)
     mPar = params.ModelParams(configFile=modelParamFile, temperature=dPar.temperature)
     aPar = params.AlgoParams(configFile=algoParamFile)
 
@@ -160,12 +148,11 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
 
     # Run fat/water processing and save output
     if aPar.use3D or dPar.nz == 1:
-        output = run_pipeline(dPar, aPar, mPar)
-        save(output, dPar)
+        return run_pipeline(dPar, aPar, mPar)
     else:
         output = []
         for slice in range(dPar.nz):
             print(f'Processing slice {slice+1}/{dPar.nz}...')
             sliceDataParams = replace(dPar, sliceList=[slice])
             output.append(run_pipeline(sliceDataParams, aPar, mPar))
-        save(mergeOutputSlices(output), dPar)
+        return mergeOutputSlices(output)

@@ -8,7 +8,7 @@ import numpy as np
 import scipy.io
 import time
 from pathlib import Path
-from mri_fatwater import fatwater
+from mri_fatwater import fatwater, MATLAB
 
 
 def getScore(case, dir, refFile):
@@ -25,6 +25,12 @@ def getScore(case, dir, refFile):
     score = 100 * \
         (1 - np.sum((np.abs(refFF - recFF) > 0.1) * mask) / np.sum(mask))
     return score
+
+
+def save(output, outdir):
+    for seriesType in output: # zero pad if was cropped and reshape to row,col,slice
+        output[seriesType] = np.moveaxis(output[seriesType], 0, -1)
+    MATLAB.save(output, outdir)
 
 
 if __name__ == '__main__':
@@ -55,10 +61,11 @@ if __name__ == '__main__':
             algoParamsFile = rootPath / 'configs/algoParams2D.yml'
         else:
             algoParamsFile = rootPath / 'configs/algoParams3D.yml'
-        outDir = challengePath / f'{str(case).zfill(2)}_REC'
+        outdir = challengePath / f'{str(case).zfill(2)}_REC'
         t = time.time()
-        fatwater.separate(dataParamsFile, algoParamsFile, modelParamsFile, outDir)
-        results.append((case, getScore(case, outDir, refFile), time.time() - t))
+        output = fatwater.separate(dataParamsFile, algoParamsFile, modelParamsFile)
+        save(output, outdir)
+        results.append((case, getScore(case, outdir, refFile), time.time() - t))
 
     print()
     for case, score, recTime in results:
