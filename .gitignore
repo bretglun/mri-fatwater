@@ -4,6 +4,7 @@ FWQPBO32_old.dll
 algoParams_test.txt
 *.mat
 challenge/*_REC/
+data/*_REC/
 challenge/2test.txt
 modelParamsFAC.txt
 test.py
