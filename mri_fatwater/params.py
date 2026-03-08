@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields
 import yaml
 import numpy as np
 from typing import Optional
@@ -18,22 +18,24 @@ def read_config_file(config_file):
 
 # dataclass parameters are set with increasing priority: 
 # 1. defaults
-# 2. metadata from data files specified in config file
-# 3. config file parameters
-# 4. excplicit overrides
+# 2. config file parameters
+# 3. explicit overrides
 def init_dataclass(dataclass_instance, configFile, **overrides):
     params = {f.name: f.default for f in fields(dataclass_instance) if f.init}
 
     config_data = read_config_file(configFile)
 
     if type(dataclass_instance).__name__ == 'DataParams':
-        data_files = overrides.get('files', config_data.get('files', []))
-        data_dirs = overrides.get('dirs', config_data.get('dirs', []))
+        data_file = overrides.get('file', config_data.get('file', None))
         filepath = overrides.get('filepath', config_data.get('filepath', configFile.parent if configFile else './'))
 
-        if data_files or data_dirs:
-            data = load_data(data_files, data_dirs, filepath)
-            params.update(data)
+        if data_file:
+            if Path(data_file).suffix != '.npy':
+                raise ValueError(f'Data file must be in .npy format, not "{data_file}"')
+            if not Path(filepath / data_file).is_file():
+                raise FileNotFoundError(f'Could not find data file "{data_file}" in path "{filepath}"')
+            data_file = Path(filepath / data_file)
+            params['img'] = np.load(data_file).transpose()
 
     params.update(config_data)
 
@@ -80,25 +82,7 @@ def init_dataclass(dataclass_instance, configFile, **overrides):
             if param not in overrides:
                 if param in config_data:
                     msg += f' (from config file {configFile})'
-                elif param in data:
-                    msg += f' (from data file(s) {data_files} and/or data dirs {data_dirs})'
             raise Exception(msg)
-
-
-def load_data(data_files, data_dirs, base_path):
-
-    if len(data_files) > 0:
-        data_files = [base_path / file for file in list(data_files) if Path(base_path / file).is_file()]
-    
-    if len(data_dirs) > 0:
-        data_dirs = [base_path / dir for dir in list(data_dirs) if Path(base_path / dir).is_dir()]
-        for path in data_dirs:
-            data_files += [obj for obj in path.iterdir() if obj.is_file()]
-    
-    if len(data_files) == 1 and data_files[0].suffix == '.npy':
-        return {'img': np.load(data_files[0]).transpose()}
-    else:
-        raise ValueError('Data files must be in .npy format')
 
 
 @dataclass
@@ -116,8 +100,7 @@ class DataParams:
     temperature: Optional[float] = None
     offresCenter: int = 0 # TODO: units of Hz instead of index
     reScale: float = 1.0 # TODO: handle differently
-    files: tuple[str, ...] = field(default=(), repr=False)
-    dirs: tuple[str, ...] = field(default=(), repr=False)
+    file: str = field(default=None, repr=False)
 
     configFile: Optional[str] = field(default=None, repr=False)
 
