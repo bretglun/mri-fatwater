@@ -2,7 +2,7 @@ import optparse
 from mri_fatwater import fatwater
 
 
-def main():
+def CLI():
     # Initiate command line parser
     p = optparse.OptionParser()
     p.add_option('--dataParamFile', '-d', default='',  type="string",
@@ -19,4 +19,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    CLI()

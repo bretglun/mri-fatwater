@@ -87,13 +87,13 @@ def padCropped(data, dPar):
 
 
 # Perform fat/water separation and return prescribed output
-def reconstruct(dPar, aPar, mPar):
+def run_pipeline(dPar, aPar, mPar):
 
     if aPar.autocrop and dPar.crop is None:
         dPar = autocrop(dPar)
 
     # Do the fat/water separation
-    rho, B0map, R2map = algorithm.reconstruct(dPar, aPar, mPar)
+    rho, B0map, R2map = algorithm.core_fatwater_separation(dPar, aPar, mPar)
     wat = rho[0]
     fat = getFat(rho, mPar.alpha)
 
@@ -121,7 +121,7 @@ def reconstruct(dPar, aPar, mPar):
 
     # Do any Fatty Acid Composition in a second pass
     if hasattr(mPar, 'pass2'):
-        rho = algorithm.reconstruct(dPar, aPar.pass2, mPar.pass2, B0map, R2map)[0]
+        rho = algorithm.core_fatwater_separation(dPar, aPar.pass2, mPar.pass2, B0map, R2map)[0]
         CL, UD, PUD = getFattyAcidComposition(rho)
     
         if 'CL' in aPar.output:
@@ -160,12 +160,12 @@ def separate(dataParamFile, algoParamFile, modelParamFile, outDir=None):
 
     # Run fat/water processing and save output
     if aPar.use3D or dPar.nz == 1:
-        output = reconstruct(dPar, aPar, mPar)
+        output = run_pipeline(dPar, aPar, mPar)
         save(output, dPar)
     else:
         output = []
         for slice in range(dPar.nz):
             print(f'Processing slice {slice+1}/{dPar.nz}...')
             sliceDataParams = replace(dPar, sliceList=[slice])
-            output.append(reconstruct(sliceDataParams, aPar, mPar))
+            output.append(run_pipeline(sliceDataParams, aPar, mPar))
         save(mergeOutputSlices(output), dPar)
