@@ -10,10 +10,8 @@ license = "GPL-3.0-or-later"
 requires-python = ">=3.14"
 dependencies = [
     "numpy>=2.4.2",
-    "pydicom>=3.0.1",
     "pyyaml>=6.0.3",
     "scikit-image>=0.26.0",
-    "scipy>=1.17.0",
     "thinqpbo>=0.1.5",
 ]
 

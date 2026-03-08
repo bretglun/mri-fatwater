@@ -3,7 +3,6 @@ import yaml
 import numpy as np
 from typing import Optional
 from pathlib import Path
-from mri_fatwater import DICOM, MATLAB
 
 
 def read_config_file(config_file):
@@ -96,16 +95,10 @@ def load_data(data_files, data_dirs, base_path):
         for path in data_dirs:
             data_files += [obj for obj in path.iterdir() if obj.is_file()]
     
-    valid_DICOM_files = DICOM.getValidFiles(data_files)
-    
-    if valid_DICOM_files:
-        return DICOM.readData(valid_DICOM_files)
-    elif len(data_files) == 1 and data_files[0].suffix == '.mat':
-        return MATLAB.readISMRMchallengeData(data_files[0])
-    elif len(data_files) == 1 and data_files[0].suffix == '.npy':
+    if len(data_files) == 1 and data_files[0].suffix == '.npy':
         return {'img': np.load(data_files[0]).transpose()}
     else:
-        raise Exception('No valid files found')
+        raise ValueError('Data files must be in .npy format')
 
 
 @dataclass
