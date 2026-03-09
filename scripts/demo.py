@@ -22,12 +22,12 @@ def demo_with_param_files():
     data_path = root_path / 'data'
     config_path = root_path / 'configs'
 
-    dataParamsFile = data_path / '17.yml'
-    algoParamsFile = config_path / 'algoParams3D.yml'
-    modelParamsFile = config_path / 'modelParams.yml'
+    data_param_file = data_path / '17.yml'
+    algo_param_file = config_path / 'algoParams3D.yml'
+    model_param_file = config_path / 'modelParams.yml'
 
     t = time.time()
-    output = fatwater.separate(dataParamsFile, algoParamsFile, modelParamsFile)
+    output = fatwater.separate(data_param_file=data_param_file, algo_param_file=algo_param_file, model_param_file=model_param_file)
     print(f'Fat/water separation took {time.time() - t:.1f} sec')
 
     save(output, data_path / '17_REC')

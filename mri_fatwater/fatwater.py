@@ -125,11 +125,21 @@ def run_pipeline(dPar, aPar, mPar):
     return output
 
 
-def separate(dataParamFile, algoParamFile, modelParamFile):
-    # Read configuration files
-    dPar = params.DataParams(dataParamFile)
-    mPar = params.ModelParams(configFile=modelParamFile, temperature=dPar.temperature)
-    aPar = params.AlgoParams(configFile=algoParamFile)
+
+
+def separate(data=None, 
+             data_params={}, 
+             algo_params={}, 
+             model_params={}, 
+             data_param_file=None, 
+             algo_param_file=None, 
+             model_param_file=None):
+    
+    data_params, algo_params, model_params = params.prepare(data, data_params, algo_params, model_params, data_param_file, algo_param_file, model_param_file)
+    
+    dPar = params.DataParams(**data_params)
+    mPar = params.ModelParams(**model_params, temperature=dPar.temperature)
+    aPar = params.AlgoParams(**algo_params)
 
     if mPar.nFAC > 0:
         # For Fatty Acid Composition, create algorithm and model params for two passes
@@ -153,6 +163,6 @@ def separate(dataParamFile, algoParamFile, modelParamFile):
         output = []
         for slice in range(dPar.nz):
             print(f'Processing slice {slice+1}/{dPar.nz}...')
-            sliceDataParams = replace(dPar, sliceList=[slice])
+            sliceDataParams = replace(dPar, slices=[slice])
             output.append(run_pipeline(sliceDataParams, aPar, mPar))
         return mergeOutputSlices(output)

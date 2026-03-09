@@ -16,73 +16,14 @@ def read_config_file(config_file):
         return {}
 
 
-# dataclass parameters are set with increasing priority: 
-# 1. defaults
-# 2. config file parameters
-# 3. explicit overrides
-def init_dataclass(dataclass_instance, configFile, **overrides):
+def init_dataclass(dataclass_instance, **overrides):
     params = {f.name: f.default for f in fields(dataclass_instance) if f.init}
-
-    config_data = read_config_file(configFile)
-
-    if type(dataclass_instance).__name__ == 'DataParams':
-        data_file = overrides.get('file', config_data.get('file', None))
-        filepath = overrides.get('filepath', config_data.get('filepath', configFile.parent if configFile else './'))
-
-        if data_file:
-            if Path(data_file).suffix != '.npy':
-                raise ValueError(f'Data file must be in .npy format, not "{data_file}"')
-            if not Path(filepath / data_file).is_file():
-                raise FileNotFoundError(f'Could not find data file "{data_file}" in path "{filepath}"')
-            data_file = Path(filepath / data_file)
-            params['img'] = np.load(data_file).transpose()
-
-    params.update(config_data)
-
     params.update(overrides)
-    params['configFile'] = configFile
-
-    if type(dataclass_instance).__name__ == 'DataParams':
-        if 'img' not in params or not isinstance(params['img'], np.ndarray) or params['img'].ndim != 4:
-            raise ValueError('DataParams requires a 4D numpy array "img" with dimensions (N, nz, ny, nx)')
-        if len(params['t']) != params['img'].shape[0]:
-            raise ValueError(f'Number of time shifts ({len(params['t'])}) does not match number of echoes in data ({params['img'].shape[0]})')
-        if 'echoes' in params:
-            echoes = params.pop('echoes')
-            if any(echo not in range(len(params['t'])) for echo in echoes):
-                raise ValueError(f'Echo indices must be over 0 and smaller than {params['img'].shape[0]} (number of echoes in data)')
-            params['t'] = tuple(params['t'][i] for i in echoes)
-            params['img'] = params['img'][echoes, ...]
-        if 'sliceList' in params:
-            sliceList = params.pop('sliceList')
-            if any(slice not in range(params['img'].shape[1]) for slice in sliceList):
-                raise ValueError(f'Slice indices must be over 0 and smaller than {params['img'].shape[1]} (number of slices in data)')
-            params['img'] = params['img'][:, sliceList, ...]
-        if params['pad']:
-            if 'crop' not in params or params['crop'] is None:
-                params['pad'] = False
-            else:
-                dataclass_instance.original_shape = params['img'].shape[1:]
-        if 'crop' in params and params['crop'] is not None:
-            if len(params['crop']) != 6:
-                raise ValueError('Param "crop" must be a list of six integers: [x0, y0, z0, x1, y1, z1]')
-            if params['crop'][0] < 0 or params['crop'][1] < 0 or params['crop'][2] < 0 or params['crop'][3] > params['img'].shape[3] or params['crop'][4] > params['img'].shape[2] or params['crop'][5] > params['img'].shape[1]:
-                raise ValueError(f'Param "crop" values must be within the image dimensions (nx={params['img'].shape[3]}, ny={params['img'].shape[2]}, nz={params['img'].shape[1]})')
-            params['img'] = params['img'][:, params['crop'][2]:params['crop'][5], params['crop'][1]:params['crop'][4], params['crop'][0]:params['crop'][3]]
-        if 'clockwisePrecession' in params:
-            clockwisePrecession = params.pop('clockwisePrecession')
-            if not clockwisePrecession:
-                np.conjugate(params['img'], out=params['img'])
 
     for param in params:
-        if hasattr(dataclass_instance, param):
-            setattr(dataclass_instance, param, params[param])
-        else:
-            msg = f'Unknown parameter "{param}" passed to {type(dataclass_instance).__name__} constructor'
-            if param not in overrides:
-                if param in config_data:
-                    msg += f' (from config file {configFile})'
-            raise Exception(msg)
+        if not hasattr(dataclass_instance, param):
+            raise ValueError(f'Unknown parameter "{param}" passed to {type(dataclass_instance).__name__} constructor')
+        setattr(dataclass_instance, param, params[param])
 
 
 @dataclass
@@ -102,13 +43,43 @@ class DataParams:
     reScale: float = 1.0 # TODO: handle differently
     file: str = field(default=None, repr=False)
 
-    configFile: Optional[str] = field(default=None, repr=False)
-
-    def __init__(self, configFile: Optional[str] = None, **overrides):
-        init_dataclass(self, configFile, **overrides)
+    def __init__(self, echoes=None, slices=None, clockwise=True, **overrides):
+        init_dataclass(self, **overrides)
         
+        if not isinstance(self.img, np.ndarray) or self.img.ndim != 4:
+            raise ValueError('DataParams requires a 4D numpy array "img" with dimensions (N, nz, ny, nx)')
+        if len(self.t) != self.img.shape[0]:
+            raise ValueError(f'Number of time shifts ({len(self.t)}) does not match number of echoes in data ({self.img.shape[0]})')
+        if echoes is not None:
+            if any(echo not in range(len(self.t)) for echo in echoes):
+                raise ValueError(f'Echo indices must be over 0 and smaller than {self.img.shape[0]} (number of echoes in data)')
+            self.t = tuple(self.t[i] for i in echoes)
+            self.img = self.img[echoes, ...]
+        if slices is not None:
+            if any(slice not in range(self.img.shape[1]) for slice in slices):
+                raise ValueError(f'Slice indices must be over 0 and smaller than {self.img.shape[1]} (number of slices in data)')
+            self.img = self.img[:, slices, ...]
+        if self.pad:
+            if self.crop is None:
+                self.pad = False
+            else:
+                self.original_shape = self.img.shape[1:]
+        if self.crop is not None:
+            if len(self.crop) != 6:
+                raise ValueError('Param "crop" must be a list of six integers: [x0, y0, z0, x1, y1, z1]')
+            low = self.crop[2::-1]
+            high = self.crop[5:2:-1]
+            if any(lo<0 or lo>N or hi<0 or hi>N or hi<=lo for lo, hi, N in zip(low, high, self.img.shape[1:])):
+                raise ValueError(f'Param "crop" [x0, y0, z0, x1, y1, z1] values must be within the image dimensions (nx={self.img.shape[3]}, ny={self.img.shape[2]}, nz={self.img.shape[1]})')
+            self.img = self.img[:, low[0]:high[0], low[1]:high[1], low[2]:high[2]]
+        if not clockwise:
+            np.conjugate(self.img, out=self.img)
+
         self.img *= self.reScale
 
+        if any(s<1 for s in self.img.shape):
+            raise ValueError(f'Empty data dims found: img.shape={self.img.shape}')
+        
         if self.N < 2:
             raise Exception(f'At least two echoes required, only {self.N} found')
     
@@ -151,11 +122,8 @@ class ModelParams:
     P2U: float = 0.2 # Derived from Lundbom et al., NMR in Biomed 23(5):466–72, 2010
     UD: float = 2.6  # Derived from Lundbom et al., NMR in Biomed 23(5):466–72, 2010
 
-    configFile: Optional[str] = field(default=None, repr=False)
-
-    def __init__(self, configFile: Optional[str] = None, temperature=None, **overrides):
-        init_dataclass(self, configFile, **overrides)
-        
+    def __init__(self, temperature=None, **overrides):
+        init_dataclass(self, **overrides)
         if self.nFAC > 0:
             if self.nFAC > 3:
                 raise ValueError(f'Unknown number of FAC parameters: {self.nFAC}')
@@ -226,10 +194,8 @@ class AlgoParams:
     realEstimates: Optional[bool] = None
     autocrop: bool = True
 
-    configFile: Optional[str] = field(default=None, repr=False)
-
-    def __init__(self, configFile: Optional[str] = None, N=None, nFAC=0, **overrides):
-        init_dataclass(self, configFile, **overrides)
+    def __init__(self, N=None, nFAC=0, **overrides):
+        init_dataclass(self, **overrides)
     
         if self.realEstimates is None:
             self.realEstimates = (N == 2)
@@ -250,3 +216,40 @@ class AlgoParams:
             self.output.append('PUD')
         if (nFAC > 0):
             self.output.append('UD')
+
+
+def load_data(data_file, filepath):
+    if not data_file:
+        raise ValueError('No data file specified in parameters')
+    if Path(data_file).suffix != '.npy':
+        raise ValueError(f'Data file must be in .npy format, not "{data_file}"')
+    if not Path(filepath / data_file).is_file():
+        raise FileNotFoundError(f'Could not find data file "{data_file}" in path "{filepath}"')
+    data_file = Path(filepath / data_file)
+    return np.load(data_file).transpose()
+
+
+def prepare_data_params(data, data_params, data_param_file):
+    params = get_params(data_param_file, data_params)
+    data_file = params.pop('file') if 'file' in params else None
+    filepath = params.pop('filepath') if 'filepath' in params else (data_param_file.parent if data_param_file else '.')
+    params['img'] = data
+    if params['img'] is None:
+        try:
+            params['img'] = load_data(data_file, filepath)
+        except Exception as e:
+            raise Exception('No data provided and could not load data from file') from e    
+    return params
+
+
+def get_params(config_file, overrides):
+    params = read_config_file(config_file)
+    params.update(overrides)
+    return params
+
+
+def prepare(data, data_params, algo_params, model_params, data_param_file, algo_param_file, model_param_file):
+    data_params = prepare_data_params(data, data_params, data_param_file)
+    model_params = get_params(model_param_file, model_params)
+    algo_params = get_params(algo_param_file, algo_params)
+    return data_params, algo_params, model_params
