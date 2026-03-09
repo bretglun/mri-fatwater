@@ -28,7 +28,7 @@ def init_dataclass(dataclass_instance, **overrides):
 
 @dataclass
 class DataParams:
-    img: Optional[np.ndarray] = field(default=None, repr=False)
+    data: Optional[np.ndarray] = field(default=None, repr=False)
     t: tuple[float, ...] = field(default=None) # [sec] dephasing times (=TE for gradient echo)
     B0: float = 3.0 # [T]
     dx: float = 1.5 # [mm] TODO: consider voxelsize tuple instead
@@ -46,39 +46,39 @@ class DataParams:
     def __init__(self, echoes=None, slices=None, clockwise=True, **overrides):
         init_dataclass(self, **overrides)
         
-        if not isinstance(self.img, np.ndarray) or self.img.ndim != 4:
-            raise ValueError('DataParams requires a 4D numpy array "img" with dimensions (N, nz, ny, nx)')
-        if len(self.t) != self.img.shape[0]:
-            raise ValueError(f'Number of time shifts ({len(self.t)}) does not match number of echoes in data ({self.img.shape[0]})')
+        if not isinstance(self.data, np.ndarray) or self.data.ndim != 4:
+            raise ValueError('DataParams requires a 4D numpy array "data" with dimensions (N, nz, ny, nx)')
+        if len(self.t) != self.data.shape[0]:
+            raise ValueError(f'Number of time shifts ({len(self.t)}) does not match number of echoes in data ({self.data.shape[0]})')
         if echoes is not None:
             if any(echo not in range(len(self.t)) for echo in echoes):
-                raise ValueError(f'Echo indices must be over 0 and smaller than {self.img.shape[0]} (number of echoes in data)')
+                raise ValueError(f'Echo indices must be over 0 and smaller than {self.data.shape[0]} (number of echoes in data)')
             self.t = tuple(self.t[i] for i in echoes)
-            self.img = self.img[echoes, ...]
+            self.data = self.data[echoes, ...]
         if slices is not None:
-            if any(slice not in range(self.img.shape[1]) for slice in slices):
-                raise ValueError(f'Slice indices must be over 0 and smaller than {self.img.shape[1]} (number of slices in data)')
-            self.img = self.img[:, slices, ...]
+            if any(slice not in range(self.data.shape[1]) for slice in slices):
+                raise ValueError(f'Slice indices must be over 0 and smaller than {self.data.shape[1]} (number of slices in data)')
+            self.data = self.data[:, slices, ...]
         if self.pad:
             if self.crop is None:
                 self.pad = False
             else:
-                self.original_shape = self.img.shape[1:]
+                self.original_shape = self.data.shape[1:]
         if self.crop is not None:
             if len(self.crop) != 6:
                 raise ValueError('Param "crop" must be a list of six integers: [x0, y0, z0, x1, y1, z1]')
             low = self.crop[2::-1]
             high = self.crop[5:2:-1]
-            if any(lo<0 or lo>N or hi<0 or hi>N or hi<=lo for lo, hi, N in zip(low, high, self.img.shape[1:])):
-                raise ValueError(f'Param "crop" [x0, y0, z0, x1, y1, z1] values must be within the image dimensions (nx={self.img.shape[3]}, ny={self.img.shape[2]}, nz={self.img.shape[1]})')
-            self.img = self.img[:, low[0]:high[0], low[1]:high[1], low[2]:high[2]]
+            if any(lo<0 or lo>N or hi<0 or hi>N or hi<=lo for lo, hi, N in zip(low, high, self.data.shape[1:])):
+                raise ValueError(f'Param "crop" [x0, y0, z0, x1, y1, z1] values must be within the image dimensions (nx={self.data.shape[3]}, ny={self.data.shape[2]}, nz={self.data.shape[1]})')
+            self.data = self.data[:, low[0]:high[0], low[1]:high[1], low[2]:high[2]]
         if not clockwise:
-            np.conjugate(self.img, out=self.img)
+            np.conjugate(self.data, out=self.data)
 
-        self.img *= self.reScale
+        self.data *= self.reScale
 
-        if any(s<1 for s in self.img.shape):
-            raise ValueError(f'Empty data dims found: img.shape={self.img.shape}')
+        if any(s<1 for s in self.data.shape):
+            raise ValueError(f'Empty data dims found: data.shape={self.data.shape}')
         
         if self.N < 2:
             raise Exception(f'At least two echoes required, only {self.N} found')
@@ -89,15 +89,15 @@ class DataParams:
     
     @property
     def nz(self):
-        return self.img.shape[1]
+        return self.data.shape[1]
     
     @property
     def ny(self):
-        return self.img.shape[2]
+        return self.data.shape[2]
     
     @property
     def nx(self):
-        return self.img.shape[3]
+        return self.data.shape[3]
     
     @property
     def t1(self):
@@ -233,10 +233,10 @@ def prepare_data_params(data, data_params, data_param_file):
     params = get_params(data_param_file, data_params)
     data_file = params.pop('file') if 'file' in params else None
     filepath = params.pop('filepath') if 'filepath' in params else (data_param_file.parent if data_param_file else '.')
-    params['img'] = data
-    if params['img'] is None:
+    params['data'] = data
+    if params['data'] is None:
         try:
-            params['img'] = load_data(data_file, filepath)
+            params['data'] = load_data(data_file, filepath)
         except Exception as e:
             raise Exception('No data provided and could not load data from file') from e    
     return params

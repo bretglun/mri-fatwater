@@ -48,7 +48,7 @@ def getFat(rho, alpha):
 
 def autocrop(dPar):
     crop = [0] * 6 # [x0, y0, z0, x1, y1, z1]
-    abs_img = np.mean(np.abs(dPar.img), axis=0)
+    abs_img = np.mean(np.abs(dPar.data), axis=0)
     threshold = np.percentile(abs_img, 95) * .01
     
     for dim in range(3):
@@ -152,7 +152,7 @@ def separate(data=None,
 
     print(dPar)
     print(f't = {' / '.join(f'{t*1e3:.2f}' for t in dPar.t)} msec')
-    print(f'(nx, ny, nz) = {dPar.img.shape[-1:0:-1]}')
+    print(f'(nx, ny, nz) = {dPar.data.shape[-1:0:-1]}')
     print(mPar)
     print(aPar)
 

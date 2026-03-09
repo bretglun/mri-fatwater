@@ -328,7 +328,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     determineB0 = aPar.graphcutLevel is not None or aPar.nICMiter > 0
     determineR2 = (aPar.nR2 > 1) and (R2map is None)
 
-    Y = dPar.img
+    Y = dPar.data
 
     # Prepare matrices
     # Off-resonance modulation vectors (one for each off-resonance value)
