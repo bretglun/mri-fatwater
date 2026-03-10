@@ -193,6 +193,7 @@ class AlgoParams:
     offresPenalty: float = 0.
     realEstimates: Optional[bool] = None
     autocrop: bool = True
+    output: Optional[tuple[str, ...]] = None
 
     def __init__(self, N=None, nFAC=0, **overrides):
         init_dataclass(self, **overrides)
@@ -205,17 +206,18 @@ class AlgoParams:
         
         self.maxICMupdate = round(self.nB0/10)
 
-        self.output = ['wat', 'fat', 'ff', 'B0map']
-        if self.realEstimates:
-            self.output.append('phi')
-        if (self.nR2 > 1):
-            self.output.append('R2map')
-        if (nFAC > 2):
-            self.output.append('CL')
-        if (nFAC > 1):
-            self.output.append('PUD')
-        if (nFAC > 0):
-            self.output.append('UD')
+        if self.output is None:
+            self.output = ['wat', 'fat', 'ff', 'B0map']
+            if self.realEstimates:
+                self.output.append('phi')
+            if (self.nR2 > 1):
+                self.output.append('R2map')
+            if (nFAC > 2):
+                self.output.append('CL')
+            if (nFAC > 1):
+                self.output.append('PUD')
+            if (nFAC > 0):
+                self.output.append('UD')
 
 
 def load_data(data_file, filepath):

@@ -117,8 +117,7 @@ def run_FAC_passes(dPar, aPar, mPar):
     if (mPar.nFAC > 2):
         output.append('CL')
     mPar1 = replace(mPar, nFAC=0, relAmps=None)
-    aPar2 = replace(aPar, nICMiter=0, graphcut=False, graphcutLevel=None)
-    aPar2.output = output
+    aPar2 = replace(aPar, nICMiter=0, graphcut=False, graphcutLevel=None, output=output)
     passes = [
         (dPar, aPar, mPar1), # First pass: use standard fat-water separation to determine B0 and R2*
         (dPar, aPar2, mPar)  # Second pass: use B0- and R2*-maps from first pass and do the Fatty Acid Composition
