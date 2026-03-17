@@ -371,7 +371,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
 
         level = {'L': 0, 'nx': dPar.nx, 'ny': dPar.ny, 'nz': dPar.nz,
                  'sx': 1, 'sy': 1, 'sz': 1,
-                 'dx': dPar.voxelsize[2], 'dy': dPar.voxelsize[1], 'dz': dPar.voxelsize[0]}
+                 'dx': dPar.voxelsize[0], 'dy': dPar.voxelsize[1], 'dz': dPar.voxelsize[2]}
         J = getB0Residuals(Y, C, aPar.nB0, aPar.iR2cand, D)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
