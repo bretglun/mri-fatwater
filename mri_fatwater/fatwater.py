@@ -25,9 +25,9 @@ def autocrop(dPar):
 # Zero pad cropped data to original shape if prescribed
 def pad_cropped(data, dPar):
     if dPar.pad:
-        nz, ny, nx = dPar.original_shape
+        nx, ny, nz = dPar.original_shape
         x0, y0, z0, x1, y1, z1 = dPar.crop
-        return np.pad(data, ((z0, nz-z1), (y0, ny-y1), (x0, nx-x1)))
+        return np.pad(data, ((x0, nx-x1), (y0, ny-y1), (z0, nz-z1)))
     else:
         return data
 
@@ -136,7 +136,7 @@ def separate(data=None,
 
     print(dPar)
     print(f't = {' / '.join(f'{t*1e3:.2f}' for t in dPar.t)} msec')
-    print(f'(nx, ny, nz) = {dPar.data.shape[-1:0:-1]}')
+    print(f'(nx, ny, nz) = {dPar.data.shape[1:]}')
     print(mPar)
     print(aPar)
 

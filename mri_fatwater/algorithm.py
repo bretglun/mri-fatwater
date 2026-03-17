@@ -6,38 +6,38 @@ from .constants import GYRO
 
 def QPBO(D, Vx, Vy, Vz):
     graph = tq.QPBOFloat()
-    nz, ny, nx = D.shape[1:]
-    numNodes = nz * ny *nx
+    nx, ny, nz = D.shape[1:]
+    numNodes = nx * ny *nz
     graph.add_node(numNodes)
 
     # Add unary terms:
     for i in range(numNodes):
-        (z, y, x) = np.unravel_index(i, (nz, ny, nx))
-        graph.add_unary_term(i, D[0, z, y, x], D[1, z, y, x])
+        (x, y, z) = np.unravel_index(i, (nx, ny, nz))
+        graph.add_unary_term(i, D[0, x, y, z], D[1, x, y, z])
     
     # Add binary terms in x-direction:
     for z in range(nz):
         for y in range(ny):
             for x in range(nx-1):
-                i = np.ravel_multi_index((z, y, x), (nz, ny, nx)) # node index
-                j = np.ravel_multi_index((z, y, x+1), (nz, ny, nx)) # x neighbor node index
-                graph.add_pairwise_term(i, j, Vx[0, z, y, x], Vx[1, z, y, x], Vx[2, z, y, x], Vx[3, z, y, x])
+                i = np.ravel_multi_index((x, y, z), (nx, ny, nz)) # node index
+                j = np.ravel_multi_index((x+1, y, z), (nx, ny, nz)) # x neighbor node index
+                graph.add_pairwise_term(i, j, Vx[0, x, y, z], Vx[1, x, y, z], Vx[2, x, y, z], Vx[3, x, y, z])
     
     # Add binary terms in y-direction
     for z in range(nz):
         for y in range(ny-1):
             for x in range(nx) :
-                i = np.ravel_multi_index((z, y, x), (nz, ny, nx)) # node index
-                j = np.ravel_multi_index((z, y+1, x), (nz, ny, nx)) # y neighbor node index
-                graph.add_pairwise_term(i, j, Vy[0, z, y, x], Vy[1, z, y, x], Vy[2, z, y, x], Vy[3, z, y, x])
+                i = np.ravel_multi_index((x, y, z), (nx, ny, nz)) # node index
+                j = np.ravel_multi_index((x, y+1, z), (nx, ny, nz)) # y neighbor node index
+                graph.add_pairwise_term(i, j, Vy[0, x, y, z], Vy[1, x, y, z], Vy[2, x, y, z], Vy[3, x, y, z])
 
     # Add binary terms in z-direction
     for z in range(nz-1):
         for y in range(ny):
             for x in range(nx):
-                i = np.ravel_multi_index((z, y, x), (nz, ny, nx)) # node index
-                j = np.ravel_multi_index((z+1, y, x), (nz, ny, nx)) # z neighbor node index
-                graph.add_pairwise_term(i, j, Vz[0, z, y, x], Vz[1, z, y, x], Vz[2, z, y, x], Vz[3, z, y, x])
+                i = np.ravel_multi_index((x, y, z), (nx, ny, nz)) # node index
+                j = np.ravel_multi_index((x, y, z+1), (nx, ny, nz)) # z neighbor node index
+                graph.add_pairwise_term(i, j, Vz[0, x, y, z], Vz[1, x, y, z], Vz[2, x, y, z], Vz[3, x, y, z])
 
     graph.solve()
 
@@ -45,7 +45,7 @@ def QPBO(D, Vx, Vy, Vz):
     for i in range(numNodes):
         label[i] = graph.get_label(i)
 
-    return label.reshape((nz, ny, nx))
+    return label.reshape((nx, ny, nz))
 
 
 # Calculate LS error J as function of R2*
@@ -76,12 +76,12 @@ def ICM(prev, L, maxICMUpdate, nICMiter, J, V, wx, wy, wz):
         for update in updates:
             cost = J[(prev.flatten()+update) % L, range(J.shape[1])].reshape(prev.shape)  # Unary cost
             # Binary costs:
-            cost[:,:,1:]  += wx * V[abs((prev[:,:,1:]  + update) % L - prev[:,:,:-1])]
-            cost[:,:,:-1] += wx * V[abs((prev[:,:,:-1] + update) % L - prev[:,:,1:])]
+            cost[1:,:,:]  += wx * V[abs((prev[1:,:,:]  + update) % L - prev[:-1,:,:])]
+            cost[:-1,:,:] += wx * V[abs((prev[:-1,:,:] + update) % L - prev[1:,:,:])]
             cost[:,1:,:]  += wy * V[abs((prev[:,1:,:]  + update) % L - prev[:,:-1,:])]
             cost[:,:-1,:] += wy * V[abs((prev[:,:-1,:] + update) % L - prev[:,1:,:])]
-            cost[1:,:,:]  += wz * V[abs((prev[1:,:,:]  + update) % L - prev[:-1,:,:])]
-            cost[:-1,:,:] += wz * V[abs((prev[:-1,:,:] + update) % L - prev[1:,:,:])]
+            cost[:,:,1:]  += wz * V[abs((prev[:,:,1:]  + update) % L - prev[:,:,:-1])]
+            cost[:,:,:-1] += wz * V[abs((prev[:,:,:-1] + update) % L - prev[:,:,1:])]
 
             current[cost < min_cost] = (prev[cost < min_cost]+update) % L
             min_cost[cost < min_cost] = cost[cost < min_cost]
@@ -96,16 +96,16 @@ def findMinima(f): return np.where((f < np.roll(f, 1))*(f < np.roll(f, -1)))[0]
 def findTwoSmallestMinima(J):
     A = np.zeros(J.shape[1:], dtype=int)
     B = np.zeros(J.shape[1:], dtype=int)
-    for z in range(J.shape[1]):
+    for x in range(J.shape[1]):
         for y in range(J.shape[2]):
-            for x in range(J.shape[3]):
-                minima = sorted(findMinima(J[:,z,y,x]), key=lambda b: J[b,z,y,x])[:2]
+            for z in range(J.shape[3]):
+                minima = sorted(findMinima(J[:,x,y,z]), key=lambda b: J[b,x,y,z])[:2]
                 if len(minima) == 2:
-                    A[z,y,x], B[z,y,x] = minima
+                    A[x,y,z], B[x,y,z] = minima
                 elif len(minima) == 1:
-                    A[z,y,x] = B[z,y,x] = minima[0]
+                    A[x,y,z] = B[x,y,z] = minima[0]
                 else:
-                    A[z,y,x] = B[z,y,x] = 0  # Assign dummy minimum
+                    A[x,y,z] = B[x,y,z] = 0  # Assign dummy minimum
     return A, B
 
 
@@ -155,15 +155,15 @@ def getHigherLevel(level):
 
 
 def getHighLevelResidualImage(J, high, level):
-    Jhigh = np.zeros((J.shape[0], level['nz']+level['nz'] % high['sz'],
+    Jhigh = np.zeros((J.shape[0], level['nx']+level['nx'] % high['sx'],
                                   level['ny']+level['ny'] % high['sy'],
-                                  level['nx']+level['nx'] % high['sx']))
-    Jhigh[:, :level['nz'], :level['ny'], :level['nx']] = J
-    return Jhigh.reshape((J.shape[0], high['nz'], high['sz'], high['ny'], high['sy'], high['nx'], high['sx'])).mean(axis=(2,4,6))
+                                  level['nz']+level['nz'] % high['sz']))
+    Jhigh[:, :level['nx'], :level['ny'], :level['nz']] = J
+    return Jhigh.reshape((J.shape[0], high['nx'], high['sx'], high['ny'], high['sy'], high['nz'], high['sz'])).mean(axis=(2,4,6))
 
 
 def getB0fromHighLevel(dB0high, level, high):
-    return np.repeat(np.repeat(np.repeat(dB0high, high['sx'], axis=2), high['sy'], axis=1), high['sz'], axis=0)[:level['nz'], :level['ny'], :level['nx']]
+    return np.repeat(np.repeat(np.repeat(dB0high, high['sz'], axis=2), high['sy'], axis=1), high['sx'], axis=0)[:level['nx'], :level['ny'], :level['nz']]
 
 
 def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
@@ -183,7 +183,7 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
         dB0high = calculateFieldMap(nB0, high, graphcutLevel, multiScale,
                                     maxICMupdate, nICMiter, Jhigh, V, mu,
                                     offresPenalty, offresCenter).reshape(
-                                    high['nz'], high['ny'], high['nx'])
+                                    high['nx'], high['ny'], high['nz'])
         dB0 = getB0fromHighLevel(dB0high, level, high)
         print(f'Level ({level['nx']},{level['ny']},{level['nz']}): ')
 
@@ -198,9 +198,9 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     vxls = range(J.shape[1])
     ddJ = (J[(A.flatten()+1) % nB0, vxls]+J[(A.flatten()-1) % nB0, vxls]-2*J[A.flatten(), vxls]).reshape(A.shape)
 
-    wx = np.minimum(ddJ[:,:,:-1], ddJ[:,:,1:]) * mu / level['dx']
+    wx = np.minimum(ddJ[:-1,:,:], ddJ[1:,:,:]) * mu / level['dx']
     wy = np.minimum(ddJ[:,:-1,:], ddJ[:,1:,:]) * mu / level['dy']
-    wz = np.minimum(ddJ[:-1,:,:], ddJ[1:,:,:]) * mu / level['dz']
+    wz = np.minimum(ddJ[:,:,:-1], ddJ[:,:,1:]) * mu / level['dz']
 
     # Prepare data fidelity costs
     OP = (1-np.cos(2*np.pi*(np.arange(nB0)-offresCenter)/nB0)) / 2 * offresPenalty
@@ -214,20 +214,20 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     graphcut = level['L'] >= graphcutLevel
     if graphcut:
         Vx = np.array(wx*[
-                      V[abs(A[:,:,:-1]-A[:,:,1:])],
-                      V[abs(A[:,:,:-1]-B[:,:,1:])],
-                      V[abs(B[:,:,:-1]-A[:,:,1:])],
-                      V[abs(B[:,:,:-1]-B[:,:,1:])]])
+                      V[abs(A[:-1,:,:]-A[1:,:,:])],
+                      V[abs(A[:-1,:,:]-B[1:,:,:])],
+                      V[abs(B[:-1,:,:]-A[1:,:,:])],
+                      V[abs(B[:-1,:,:]-B[1:,:,:])]])
         Vy = np.array(wy*[
                       V[abs(A[:,:-1,:]-A[:,1:,:])],
                       V[abs(A[:,:-1,:]-B[:,1:,:])],
                       V[abs(B[:,:-1,:]-A[:,1:,:])],
                       V[abs(B[:,:-1,:]-B[:,1:,:])]])
         Vz = np.array(wz*[
-                      V[abs(A[:-1,:,:]-A[1:,:,:])],
-                      V[abs(A[:-1,:,:]-B[1:,:,:])],
-                      V[abs(B[:-1,:,:]-A[1:,:,:])],
-                      V[abs(B[:-1,:,:]-B[1:,:,:])]])
+                      V[abs(A[:,:,:-1]-A[:,:,1:])],
+                      V[abs(A[:,:,:-1]-B[:,:,1:])],
+                      V[abs(B[:,:,:-1]-A[:,:,1:])],
+                      V[abs(B[:,:,:-1]-B[:,:,1:])]])
 
         print('Solving MRF using QPBO...', end='')
         label = QPBO(D, Vx, Vy, Vz)
@@ -369,7 +369,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        level = {'L': 0, 'nx': Y.shape[3], 'ny': Y.shape[2], 'nz': Y.shape[1],
+        level = {'L': 0, 'nx': Y.shape[1], 'ny': Y.shape[2], 'nz': Y.shape[3],
                  'sx': 1, 'sy': 1, 'sz': 1,
                  'dx': dPar.voxelsize[0], 'dy': dPar.voxelsize[1], 'dz': dPar.voxelsize[2]}
         scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow

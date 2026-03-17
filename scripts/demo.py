@@ -14,7 +14,7 @@ def save(output, outdir):
     for seriesType in output:
         filename = outdir / f'{seriesType}.npy'
         print(f'Writing images to "{filename}"')
-        np.save(filename, output[seriesType].transpose())
+        np.save(filename, output[seriesType])
 
 
 def demo_with_param_files():

@@ -41,9 +41,9 @@ class DataParams:
             self.t = tuple(self.t[i] for i in echoes)
             self.data = self.data[echoes, ...]
         if slices is not None:
-            if any(slice not in range(self.data.shape[1]) for slice in slices):
-                raise ValueError(f'Slice indices must be over 0 and smaller than {self.data.shape[1]} (number of slices in data)')
-            self.data = self.data[:, slices, ...]
+            if any(slice not in range(self.data.shape[3]) for slice in slices):
+                raise ValueError(f'Slice indices must be over 0 and smaller than {self.data.shape[3]} (number of slices in data)')
+            self.data = self.data[..., slices]
         if self.pad:
             if self.crop is None:
                 self.pad = False
@@ -52,10 +52,10 @@ class DataParams:
         if self.crop is not None:
             if len(self.crop) != 6:
                 raise ValueError('Param "crop" must be a list of six integers: [x0, y0, z0, x1, y1, z1]')
-            low = self.crop[2::-1]
-            high = self.crop[5:2:-1]
+            low = self.crop[:3]
+            high = self.crop[3:6]
             if any(lo<0 or lo>N or hi<0 or hi>N or hi<=lo for lo, hi, N in zip(low, high, self.data.shape[1:])):
-                raise ValueError(f'Param "crop" [x0, y0, z0, x1, y1, z1] values must be within the image dimensions (nx={self.data.shape[3]}, ny={self.data.shape[2]}, nz={self.data.shape[1]})')
+                raise ValueError(f'Param "crop" [x0, y0, z0, x1, y1, z1] values must be within the image dimensions (nx={self.data.shape[1]}, ny={self.data.shape[2]}, nz={self.data.shape[3]})')
             self.data = self.data[:, low[0]:high[0], low[1]:high[1], low[2]:high[2]]
         if not clockwise:
             np.conjugate(self.data, out=self.data)
@@ -174,7 +174,7 @@ def load_data(data_file, filepath):
     if not Path(filepath / data_file).is_file():
         raise FileNotFoundError(f'Could not find data file "{data_file}" in path "{filepath}"')
     data_file = Path(filepath / data_file)
-    return np.load(data_file).transpose()
+    return np.moveaxis(np.load(data_file), -1, 0)
 
 
 def prepare_data_params(data, data_params, data_param_file):
