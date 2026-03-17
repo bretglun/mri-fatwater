@@ -2,3 +2,4 @@
 watCS: 4.7                                          # [ppm] chemical shift for water
 fatCS: [5.3, 4.31, 2.76, 2.1, 1.3, 0.9]             # [ppm] chemical shift for fat resonances
 relAmps: [0.048, 0.039, 0.004, 0.128, 0.693, 0.087] # [a.u.] relative amplitudes of fat resonances
+realEstimates: null                                 # real-valued fat/water estimates (null for auto)

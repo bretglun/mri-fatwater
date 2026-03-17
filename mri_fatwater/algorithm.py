@@ -335,12 +335,12 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     B, Bh = modulationVectors(aPar.nB0, dPar.N)
     RA, RAp, C, Qp = [], [], [], []
     D = None
-    if aPar.realEstimates:
+    if mPar.realEstimates:
         D = []  # Matrix for calculating phi (needed for real-valued estimates)
     for r in range(aPar.nR2):
         R2 = r*aPar.R2step
         RA.append(modelMatrix(dPar, mPar, R2))
-        if aPar.realEstimates:
+        if mPar.realEstimates:
             D.append([])
             Dtmp = getDtmp(RA[r])
             for b in range(aPar.nB0):
@@ -348,7 +348,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             RA[r] = np.concatenate((np.real(RA[r]), np.imag(RA[r])))
         RAp.append(np.linalg.pinv(RA[r]))
 
-    if aPar.realEstimates:
+    if mPar.realEstimates:
         for b in range(aPar.nB0):
             B[b] = realify(B[b])
             Bh[b] = realify(Bh[b])
@@ -356,7 +356,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         C.append([])
         Qp.append([])
         # Null space projection matrix
-        proj = np.eye(dPar.N*(1+aPar.realEstimates))-np.dot(RA[r], RAp[r])
+        proj = np.eye(dPar.N*(1+mPar.realEstimates))-np.dot(RA[r], RAp[r])
         for b in range(aPar.nB0):
             C[r].append(np.dot(np.dot(B[b], proj), Bh[b]))
             Qp[r].append(np.dot(RAp[r], Bh[b]))

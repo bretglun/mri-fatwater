@@ -99,7 +99,8 @@ class ModelParams:
     # Default fat spectrum from ISMRM fat-water separation Matlab toolbox
     watCS: float = 4.7
     fatCS: tuple[float, ...] = (5.3, 4.31, 2.76, 2.1, 1.3, 0.9) # [ppm]
-    relAmps: tuple[float, ...] = (0.048, 0.039, 0.004, 0.128, 0.693, 0.087,)
+    relAmps: tuple[float, ...] = (0.048, 0.039, 0.004, 0.128, 0.693, 0.087)
+    realEstimates: Optional[bool] = None
     
     def __new__(cls, temperature=None, **overrides):
         if cls is ModelParams and 'nFAC' in overrides:
@@ -107,8 +108,11 @@ class ModelParams:
             return super().__new__(FACmodelParams)
         return super().__new__(cls)
     
-    def __init__(self, temperature=None, **overrides):
+    def __init__(self, N=None, temperature=None, **overrides):
         init_dataclass(self, **overrides)
+        
+        if self.realEstimates is None:
+            self.realEstimates = (N == 2)
         
         # Temperature dependence according to Hernando et al., MRM 72(2):464–70, 2014
         if temperature is not None:
@@ -155,24 +159,20 @@ class AlgoParams:
     nICMiter: int = 10
     use3D: bool = True
     magnitudeDiscrimination: bool = False
-    realEstimates: Optional[bool] = None
     autocrop: bool = True
     output: Optional[tuple[str, ...]] = None
 
-    def __init__(self, N=None, **overrides):
+    def __init__(self, realEstimates=False, **overrides):
         init_dataclass(self, **overrides)
-    
-        if self.realEstimates is None:
-            self.realEstimates = (N == 2)
         
         self.R2step = self.R2max/(self.nR2-1) if self.nR2 > 1 else 1. # [sec-1]
         self.iR2cand = np.array(list(set([min(self.nR2-1, int(R2/self.R2step)) for R2 in self.R2cand])))
         
         self.maxICMupdate = round(self.nB0/10)
-
+        
         if self.output is None:
             self.output = ['wat', 'fat', 'ff', 'B0map']
-            if self.realEstimates:
+            if realEstimates:
                 self.output.append('phi')
             if (self.nR2 > 1):
                 self.output.append('R2map')

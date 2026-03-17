@@ -10,6 +10,5 @@ graphcutLevel: 0                # lowest scale level to perform graph cut
 nICMiter: 10                    # iterations for B0 fine-tuning using ICM
 use3D: True                     # B0-correction in 3D
 magnitudeDiscrimination: False  # fat fraction calculation free from magnitude bias
-realEstimates: null             # real-valued fat/water estimates (null for auto)
 autocrop: True                  # auto-crop low-signal regions
 output: null                    # prescribe output images (null for auto)

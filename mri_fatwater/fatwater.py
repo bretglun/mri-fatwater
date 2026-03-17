@@ -131,8 +131,8 @@ def separate(data=None,
     data_params, algo_params, model_params = params.prepare(data, data_params, algo_params, model_params, data_param_file, algo_param_file, model_param_file)
     
     dPar = params.DataParams(**data_params)
-    mPar = params.ModelParams(**model_params, temperature=dPar.temperature)
-    aPar = params.AlgoParams(**algo_params, N=dPar.N)
+    mPar = params.ModelParams(**model_params, N=dPar.N, temperature=dPar.temperature)
+    aPar = params.AlgoParams(**algo_params, realEstimates=mPar.realEstimates)
 
     print(dPar)
     print(f't = {' / '.join(f'{t*1e3:.2f}' for t in dPar.t)} msec')
