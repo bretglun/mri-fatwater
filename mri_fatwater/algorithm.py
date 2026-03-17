@@ -263,6 +263,7 @@ def getRealDemodulated(Y, D):
 
 # Calculate LS error J as function of B0
 def getB0Residuals(Y, C, nB0, iR2cand, D=None):
+    scale = 1 / np.linalg.norm(Y)**2
     J = np.zeros(shape=(nB0, Y.shape[1], Y.shape[2], Y.shape[3], len(iR2cand)))
     for r in range(len(iR2cand)):
         for b in range(nB0):
@@ -270,7 +271,7 @@ def getB0Residuals(Y, C, nB0, iR2cand, D=None):
                 y = Y
             else:  # real-valued estimates
                 y, phi = getRealDemodulated(Y, D[r][b])
-            J[b, :, :, :, r] = np.linalg.norm(np.tensordot(C[iR2cand[r]][b], y, axes=(1,0)), axis=0)**2
+            J[b, :, :, :, r] = np.linalg.norm(np.tensordot(C[iR2cand[r]][b], y*scale, axes=(1,0)), axis=0)**2
     J = np.min(J, axis=4) # minimum over R2* candidates
     return J
 

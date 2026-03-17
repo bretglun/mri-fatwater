@@ -27,7 +27,6 @@ class DataParams:
 
     temperature: Optional[float] = None
     offresCenter: float = 0. # [ppm]
-    reScale: float = 1.0 # TODO: handle differently
 
     def __init__(self, echoes=None, slices=None, clockwise=True, **overrides):
         init_dataclass(self, **overrides)
@@ -60,8 +59,6 @@ class DataParams:
             self.data = self.data[:, low[0]:high[0], low[1]:high[1], low[2]:high[2]]
         if not clockwise:
             np.conjugate(self.data, out=self.data)
-
-        self.data *= self.reScale
 
         if any(s<1 for s in self.data.shape):
             raise ValueError(f'Empty data dims found: data.shape={self.data.shape}')
