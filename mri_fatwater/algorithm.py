@@ -369,7 +369,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        level = {'L': 0, 'nx': dPar.nx, 'ny': dPar.ny, 'nz': dPar.nz,
+        level = {'L': 0, 'nx': Y.shape[3], 'ny': Y.shape[2], 'nz': Y.shape[1],
                  'sx': 1, 'sy': 1, 'sz': 1,
                  'dx': dPar.voxelsize[0], 'dy': dPar.voxelsize[1], 'dz': dPar.voxelsize[2]}
         scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
@@ -396,7 +396,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         R2 = np.array(R2map/aPar.R2step, dtype=int)
 
     # Find least squares solution given dB0 and R2
-    rho = np.zeros(shape=(mPar.M, dPar.nz, dPar.ny, dPar.nx), dtype=complex)
+    rho = np.zeros(shape=(mPar.M, *Y.shape[1:]), dtype=complex)
     for r in range(aPar.nR2):
         for b in range(aPar.nB0):
             vxls = (dB0 == b)*(R2 == r)

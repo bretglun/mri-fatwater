@@ -71,18 +71,6 @@ class DataParams:
         return len(self.t)
     
     @property
-    def nz(self):
-        return self.data.shape[1]
-    
-    @property
-    def ny(self):
-        return self.data.shape[2]
-    
-    @property
-    def nx(self):
-        return self.data.shape[3]
-    
-    @property
     def t1(self):
         return self.t[0]
     
@@ -169,7 +157,7 @@ class AlgoParams:
         self.iR2cand = np.array(list(set([min(self.nR2-1, int(R2/self.R2step)) for R2 in self.R2cand])))
         
         self.maxICMupdate = round(self.nB0/10)
-        
+
         if self.output is None:
             self.output = ['wat', 'fat', 'ff', 'B0map']
             if realEstimates:
