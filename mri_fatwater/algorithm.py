@@ -262,8 +262,7 @@ def getRealDemodulated(Y, D):
 
 
 # Calculate LS error J as function of B0
-def getB0Residuals(Y, C, nB0, iR2cand, D=None):
-    scale = 1 / np.linalg.norm(Y)**2
+def getB0Residuals(Y, C, nB0, iR2cand, D=None, scale=1):
     J = np.zeros(shape=(nB0, Y.shape[1], Y.shape[2], Y.shape[3], len(iR2cand)))
     for r in range(len(iR2cand)):
         for b in range(nB0):
@@ -373,10 +372,11 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         level = {'L': 0, 'nx': dPar.nx, 'ny': dPar.ny, 'nz': dPar.nz,
                  'sx': 1, 'sy': 1, 'sz': 1,
                  'dx': dPar.voxelsize[0], 'dy': dPar.voxelsize[1], 'dz': dPar.voxelsize[2]}
-        J = getB0Residuals(Y, C, aPar.nB0, aPar.iR2cand, D)
+        scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
+        J = getB0Residuals(Y, C, aPar.nB0, aPar.iR2cand, D, scale)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
-            offresPenalty *= getMeanEnergy(Y)
+            offresPenalty *= getMeanEnergy(Y * scale)
 
         dB0 = calculateFieldMap(aPar.nB0, level, aPar.graphcutLevel,
                                 aPar.multiScale, aPar.maxICMupdate,
