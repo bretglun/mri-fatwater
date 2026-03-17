@@ -26,9 +26,8 @@ class DataParams:
     pad: bool = True # Whether to zero-pad back to original shape after reconstruction (if cropping was applied)
 
     temperature: Optional[float] = None
-    offresCenter: int = 0 # TODO: units of Hz instead of index
+    offresCenter: float = 0. # [ppm]
     reScale: float = 1.0 # TODO: handle differently
-    file: str = field(default=None, repr=False)
 
     def __init__(self, echoes=None, slices=None, clockwise=True, **overrides):
         init_dataclass(self, **overrides)
