@@ -1,32 +1,7 @@
 from dataclasses import replace
 import numpy as np
-from mri_fatwater import algorithm, params
+from mri_fatwater import algorithm, params, FAC
 from .constants import EPSILON
-
-
-def getFattyAcidComposition(rho):
-    nFAC = len(rho) - 2 # Number of Fatty Acid Composition Parameters
-    CL, UD, PUD = None, None, None
-
-    if nFAC == 1:
-        # UD = F2/F1
-        UD = np.abs(rho[2] / (rho[1] + EPSILON))
-    elif nFAC == 2:
-        # UD = F2/F1
-        # PUD = F3/F1
-        UD = np.abs(rho[2] / (rho[1] + EPSILON))
-        PUD = np.abs(rho[3] / (rho[1] + EPSILON))
-    elif nFAC == 3:
-        # UD = F2/F1
-        # PUD = F3/F1
-        # CL = F4/F1
-        UD = np.abs(rho[2] / (rho[1] + EPSILON))
-        PUD = np.abs(rho[3] / (rho[1] + EPSILON))
-        CL = np.abs(rho[4] / (rho[1] + EPSILON))
-    else:
-        raise Exception(f'Unknown number of Fatty Acid Composition parameters: {nFAC}')
-
-    return CL, UD, PUD
 
 
 def autocrop(dPar):
@@ -90,14 +65,11 @@ def get_prescribed_output(rho, B0map, R2map, alpha, output, magnitude_discrimina
     if 'R2map' in output:
         results['R2map'] = R2map
     
-    if any(p in output for p in ['CL', 'UD', 'PUD']):
-        CL, UD, PUD = getFattyAcidComposition(rho)
-        if 'CL' in output:
-            results['CL'] = CL
-        if 'UD' in output:
-            results['UD'] = UD
-        if 'PUD' in output:
-            results['PUD'] = PUD
+    if set(output) & FAC.output:
+        results.update(FAC.get_results(rho, output))
+    
+    if any(res not in results for res in output):
+        print(f'Warning: Could not assign prescribed output: {set(output) - set(results.keys())}')
 
     return results
 
@@ -110,29 +82,14 @@ def run_separation_passes(passes):
     return results
 
 
-def run_FAC_passes(dPar, aPar, mPar):
-    output = ['UD']
-    if (mPar.nFAC > 1):
-        output.append('PUD')
-    if (mPar.nFAC > 2):
-        output.append('CL')
-    mPar1 = replace(mPar, nFAC=0, relAmps=None)
-    aPar2 = replace(aPar, nICMiter=0, graphcut=False, graphcutLevel=None, output=output)
-    passes = [
-        (dPar, aPar, mPar1), # First pass: use standard fat-water separation to determine B0 and R2*
-        (dPar, aPar2, mPar)  # Second pass: use B0- and R2*-maps from first pass and do the Fatty Acid Composition
-    ]
-    return run_separation_passes(passes)
-
-
 def separate_volume(dPar, aPar, mPar):
     if aPar.autocrop and dPar.crop is None:
         dPar = autocrop(dPar)
     
-    if mPar.nFAC == 0:
-        results = run_separation_passes([(dPar, aPar, mPar)])
+    if isinstance(mPar, FAC.FACmodelParams):
+        results = FAC.run_FAC_passes(dPar, aPar, mPar)
     else:
-        results = run_FAC_passes(dPar, aPar, mPar)
+        results = run_separation_passes([(dPar, aPar, mPar)])
 
     for result_type in results:
         results[result_type] = pad_cropped(results[result_type], dPar)

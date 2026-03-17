@@ -117,64 +117,45 @@ class ModelParams:
     fatCS: tuple[float, ...] = (5.3, 4.31, 2.76, 2.1, 1.3, 0.9) # [ppm]
     relAmps: tuple[float, ...] = (0.048, 0.039, 0.004, 0.128, 0.693, 0.087,)
     watCS: float = 4.7
-    nFAC: int = 0
-    CL: float = 17.4 # Derived from Lundbom et al., NMR in Biomed 23(5):466–72, 2010
-    P2U: float = 0.2 # Derived from Lundbom et al., NMR in Biomed 23(5):466–72, 2010
-    UD: float = 2.6  # Derived from Lundbom et al., NMR in Biomed 23(5):466–72, 2010
-
+    
+    def __new__(cls, temperature=None, **overrides):
+        if cls is ModelParams and 'nFAC' in overrides:
+            from mri_fatwater.FAC import FACmodelParams
+            return super().__new__(FACmodelParams)
+        return super().__new__(cls)
+    
     def __init__(self, temperature=None, **overrides):
         init_dataclass(self, **overrides)
-        if self.nFAC > 0:
-            if self.nFAC > 3:
-                raise ValueError(f'Unknown number of FAC parameters: {self.nFAC}')
-            if len(self.fatCS) != 10:
-                raise ValueError('FAC excpects exactly one water and ten triglyceride resonances')
-            self.relAmps = None
         
         # Temperature dependence according to Hernando et al., MRM 72(2):464–70, 2014
         if temperature is not None:
             self.watCS = 1.3 + 3.748 -.01085 * temperature # Temp in [°C]
 
         self.CS = np.array([self.watCS] + self.fatCS, dtype=np.float32)
-        
-        self.M = 2 + self.nFAC # Number of linear components
-        self.P = len(self.CS) # Number of resonance peaks
-        self.alpha = np.zeros([self.M, self.P], dtype=np.float32)
+
+        self.set_alpha()
+    
+    def set_alpha(self):
+        M = 2 # Number of linear components
+        P = len(self.CS) # Number of resonance peaks
+        self.alpha = np.zeros([M, P], dtype=np.float32)
         self.alpha[0, 0] = 1.  # Water component
-        CL, UD, P2U = self.CL, self.UD, self.P2U # for readability later
-        if self.M == 2:
-            if self.relAmps is not None:
-                for (p, amp) in enumerate(self.relAmps):
-                    self.alpha[1, p+1] = float(amp)
-            elif self.P==1:
-                self.alpha[1, 1] = 1. # Single fat peak
-            elif self.P==11:
-                # F = 9A+(6(CL-4)+UD(2P2U-8))B+6C+4UD(1-P2U)D+6E+2UDP2UF+2G+2H+I+2UDJ
-                self.alpha[1, 1:] = [9, 6*(CL-4)+UD*(2*P2U-8), 6, 4*UD*(1-P2U), 6, 2*UD*P2U,
-                                2, 2, 1, UD*2]
-            else:
-                raise ValueError(f'Relative amplitudes not provided for the {self.P-1} fat peaks.')
-        elif self.M == 3:
-            # F1 = 9A+6(CL-4)B+6C+6E+2G+2H+I
-            # F2 = (2P2U-8)B+4(1-P2U)D+2P2UF+2J
-            self.alpha[1, 1:] = [9, 6*(CL-4), 6, 0, 6, 0, 2, 2, 1, 0]
-            self.alpha[2, 1:] = [0, 2*P2U-8, 0, 4*(1-P2U), 0, 2*P2U, 0, 0, 0, 2]
-        elif self.M == 4:
-            # F1 = 9A+6(CL-4)B+6C+6E+2G+2H+I
-            # F2 = -8B+4D+2J
-            # F3 = 2B-4D+2F
-            self.alpha[1, 1:] = [9, 6*(CL-4), 6, 0, 6, 0, 2, 2, 1, 0]
-            self.alpha[2, 1:] = [0, -8, 0, 4, 0, 0, 0, 0, 0, 2]
-            self.alpha[3, 1:] = [0, 2, 0, -4, 0, 2, 0, 0, 0, 0]
-        elif self.M == 5:
-            # F1 = 9A-24B+6C+6E+2G+2H+I
-            # F2 = -8B+4D+2J
-            # F3 = 2B-4D+2F
-            # F4 = 6B
-            self.alpha[1, 1:] = [9, -24, 6, 0, 6, 0, 2, 2, 1, 0]
-            self.alpha[2, 1:] = [0, -8, 0, 4, 0, 0, 0, 0, 0, 2]
-            self.alpha[3, 1:] = [0, 2, 0, -4, 0, 2, 0, 0, 0, 0]
-            self.alpha[4, 1:] = [0, 6, 0, 0, 0, 0, 0, 0, 0, 0]
+
+        if self.relAmps is not None:
+            for (p, amp) in enumerate(self.relAmps):
+                self.alpha[1, p+1] = float(amp)
+        elif P==2:
+            self.alpha[1, 1] = 1. # Single fat peak
+        else:
+            raise ValueError(f'Relative amplitudes not provided for the {P-1} fat peaks.')
+    
+    @property
+    def M(self):
+        return self.alpha.shape[0]
+    
+    @property
+    def P(self):
+        return self.alpha.shape[1]
 
 
 @dataclass
@@ -195,7 +176,7 @@ class AlgoParams:
     autocrop: bool = True
     output: Optional[tuple[str, ...]] = None
 
-    def __init__(self, N=None, nFAC=0, **overrides):
+    def __init__(self, N=None, **overrides):
         init_dataclass(self, **overrides)
     
         if self.realEstimates is None:
@@ -212,12 +193,6 @@ class AlgoParams:
                 self.output.append('phi')
             if (self.nR2 > 1):
                 self.output.append('R2map')
-            if (nFAC > 2):
-                self.output.append('CL')
-            if (nFAC > 1):
-                self.output.append('PUD')
-            if (nFAC > 0):
-                self.output.append('UD')
 
 
 def load_data(data_file, filepath):
