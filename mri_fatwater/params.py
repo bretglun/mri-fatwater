@@ -5,17 +5,6 @@ from typing import Optional
 from pathlib import Path
 
 
-def read_config_file(config_file):
-    if config_file:
-        with open(config_file, 'r') as f:
-            try:
-                return yaml.safe_load(f)
-            except yaml.YAMLError as exc:
-                raise Exception(f'Error reading config file {f}') from exc
-    else:
-        return {}
-
-
 def init_dataclass(dataclass_instance, **overrides):
     params = {f.name: f.default for f in fields(dataclass_instance) if f.init}
     params.update(overrides)
@@ -217,6 +206,17 @@ def prepare_data_params(data, data_params, data_param_file):
         except Exception as e:
             raise Exception('No data provided and could not load data from file') from e    
     return params
+
+
+def read_config_file(config_file):
+    if config_file:
+        with open(config_file, 'r') as f:
+            try:
+                return yaml.safe_load(f)
+            except yaml.YAMLError as exc:
+                raise Exception(f'Error reading config file {f}') from exc
+    else:
+        return {}
 
 
 def get_params(config_file, overrides):
