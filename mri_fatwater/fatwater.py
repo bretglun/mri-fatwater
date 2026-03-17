@@ -132,7 +132,7 @@ def separate(data=None,
     
     dPar = params.DataParams(**data_params)
     mPar = params.ModelParams(**model_params, temperature=dPar.temperature)
-    aPar = params.AlgoParams(**algo_params)
+    aPar = params.AlgoParams(**algo_params, N=dPar.N)
 
     print(dPar)
     print(f't = {' / '.join(f'{t*1e3:.2f}' for t in dPar.t)} msec')

@@ -1,0 +1,15 @@
+nR2: 145                        # Number of discrete R2* steps
+R2max: 144.0                    # [sec-1] R2* max value
+R2cand: [40.0]                  # [sec-1] R2* candidates subject to brute-force optimization
+nB0: 100                        # Number of discrete B0 steps
+mu: 0.1                         # B0 regularization factor
+offresPenalty: 0.               # additional off-resonance penalty factor
+graphcut: True                  # B0-correction based on graph cuts
+multiScale: True                # multi-scale B0-correction
+graphcutLevel: 0                # lowest scale level to perform graph cut
+nICMiter: 10                    # iterations for B0 fine-tuning using ICM
+use3D: True                     # B0-correction in 3D
+magnitudeDiscrimination: False  # fat fraction calculation free from magnitude bias
+realEstimates: null             # real-valued fat/water estimates (null for auto)
+autocrop: True                  # auto-crop low-signal regions
+output: null                    # prescribe output images (null for auto)

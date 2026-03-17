@@ -97,9 +97,9 @@ class DataParams:
 @dataclass
 class ModelParams:
     # Default fat spectrum from ISMRM fat-water separation Matlab toolbox
+    watCS: float = 4.7
     fatCS: tuple[float, ...] = (5.3, 4.31, 2.76, 2.1, 1.3, 0.9) # [ppm]
     relAmps: tuple[float, ...] = (0.048, 0.039, 0.004, 0.128, 0.693, 0.087,)
-    watCS: float = 4.7
     
     def __new__(cls, temperature=None, **overrides):
         if cls is ModelParams and 'nFAC' in overrides:
@@ -146,15 +146,15 @@ class AlgoParams:
     nR2: int = 145
     R2max: float = 144. # [sec-1]
     R2cand: tuple[float, ...] = (40.,) # [sec-1]
-    mu: float = 0.1
     nB0: int = 100
-    nICMiter: int = 10
+    mu: float = 0.1
+    offresPenalty: float = 0.
     graphcut: bool = True
-    graphcutLevel: int = 0
     multiScale: bool = True
+    graphcutLevel: int = 0
+    nICMiter: int = 10
     use3D: bool = True
     magnitudeDiscrimination: bool = False
-    offresPenalty: float = 0.
     realEstimates: Optional[bool] = None
     autocrop: bool = True
     output: Optional[tuple[str, ...]] = None

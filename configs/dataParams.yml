@@ -1,9 +1,11 @@
-files: [./challenge/05.mat]
-#dirs: [./data/dicom1, ./data/dicom2]
-reScale: 0.0001 # Rescaling might be needed for datasets with too small/large pixel values
-sliceList: [0, 1, 2, 3]
-echoes: [0, 1, 2]
-temperature: 37
-crop: [64, 64, 0, 128, 92, 4] # [x0, y0, z0, x1, y1, z1]
-clockwisePrecession: False
-offresCenter: 0.
+file: ../data/17.npy           # data file
+t: [0.00287, 0.00607, 0.00927] # [sec]
+B0: 1.494                      # [T]
+voxelsize: [1.5, 1.5, 5.0]     # [mm]
+crop: [64, 64, 0, 92, 92, 4]   # crop region to separate [x0, y0, z0, x1, y1, z1]
+pad: True                      # pad back after separation
+temperature: 37                # [°C]
+offresCenter: 0.               # center frequency [ppm]
+echoes: [0, 1, 2]              # echoes to use
+slices: [0, 1, 2, 3]           # slices to process
+clockwise: True                # direction of precession

@@ -23,7 +23,7 @@ def demo_with_param_files():
     config_path = root_path / 'configs'
 
     data_param_file = data_path / '17.yml'
-    algo_param_file = config_path / 'algoParams3D.yml'
+    algo_param_file = config_path / 'algoParams.yml'
     model_param_file = config_path / 'modelParams.yml'
 
     t = time.time()
