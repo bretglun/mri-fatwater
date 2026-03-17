@@ -20,9 +20,7 @@ class DataParams:
     data: Optional[np.ndarray] = field(default=None, repr=False)
     t: tuple[float, ...] = field(default=None) # [sec] dephasing times (=TE for gradient echo)
     B0: float = 3.0 # [T]
-    dx: float = 1.5 # [mm] TODO: consider voxelsize tuple instead
-    dy: float = 1.5 # [mm]
-    dz: float = 5.0 # [mm]
+    voxelsize: tuple[float, ...] = (1.5, 1.5, 5.0) # [mm]
     
     crop: Optional[tuple[int, ...]] = None # [x0, y0, z0, x1, y1, z1] (if cropping is desired)
     pad: bool = True # Whether to zero-pad back to original shape after reconstruction (if cropping was applied)
