@@ -6,15 +6,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 import numpy as np
 import time
-from mri_fatwater import fatwater
-
-
-def save(output, outdir):
-    outdir.mkdir(parents=True, exist_ok=True)
-    for seriesType in output:
-        filename = outdir / f'{seriesType}.npy'
-        print(f'Writing images to "{filename}"')
-        np.save(filename, output[seriesType])
+from mri_fatwater import fatwater, io
 
 
 def demo_with_param_files():
@@ -30,7 +22,7 @@ def demo_with_param_files():
     results = fatwater.separate(data_param_file=data_param_file, algo_param_file=algo_param_file, model_param_file=model_param_file)
     print(f'Fat/water separation took {time.time() - t:.1f} sec')
 
-    save(results, data_path / '17_REC')
+    io.save(results, data_path / '17_REC')
 
 
 if __name__ == '__main__':

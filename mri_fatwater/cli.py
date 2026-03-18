@@ -1,5 +1,5 @@
 import optparse
-from mri_fatwater import fatwater
+from mri_fatwater import fatwater, io
 
 
 def CLI():
@@ -11,11 +11,14 @@ def CLI():
                  help="File path of algorithm parameter configuration file")
     p.add_option('--modelParamFile', '-m', default='',  type="string",
                  help="File path of model parameter configuration file")
+    p.add_option('--outDir', '-o', default='.',  type="string",
+                 help="Path to save the results")
 
     # Parse command line
     options, arguments = p.parse_args()
 
-    fatwater.separate(options.dataParamFile, options.algoParamFile, options.modelParamFile)
+    results = fatwater.separate(data_param_file=options.dataParamFile, algo_param_file=options.algoParamFile, model_param_file=options.modelParamFile)
+    io.save(results, options.outDir)
 
 
 if __name__ == '__main__':

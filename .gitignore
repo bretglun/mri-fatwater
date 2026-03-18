@@ -21,3 +21,5 @@ build
 *.pyc
 TODOs.txt
 TODO.md
+
+*.npy

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field, fields
-import yaml
+from mri_fatwater import io
 import numpy as np
 from typing import Optional
 from pathlib import Path
@@ -107,7 +107,7 @@ class ModelParams:
         if temperature is not None:
             self.watCS = 1.3 + 3.748 -.01085 * temperature # Temp in [°C]
 
-        self.CS = np.array([self.watCS] + self.fatCS, dtype=np.float32)
+        self.CS = np.array([self.watCS] + list(self.fatCS), dtype=np.float32)
 
         self.set_alpha()
     
@@ -167,43 +167,21 @@ class AlgoParams:
                 self.output.append('R2map')
 
 
-def load_data(data_file, filepath):
-    if not data_file:
-        raise ValueError('No data file specified in parameters')
-    if Path(data_file).suffix != '.npy':
-        raise ValueError(f'Data file must be in .npy format, not "{data_file}"')
-    if not Path(filepath / data_file).is_file():
-        raise FileNotFoundError(f'Could not find data file "{data_file}" in path "{filepath}"')
-    data_file = Path(filepath / data_file)
-    return np.load(data_file)
-
-
 def prepare_data_params(data, data_params, data_param_file):
     params = get_params(data_param_file, data_params)
     data_file = params.pop('file') if 'file' in params else None
-    filepath = params.pop('filepath') if 'filepath' in params else (data_param_file.parent if data_param_file else '.')
+    filepath = params.pop('filepath') if 'filepath' in params else (Path(data_param_file).parent if data_param_file else '.')
     params['data'] = data
     if params['data'] is None:
         try:
-            params['data'] = load_data(data_file, filepath)
-        except Exception as e:
-            raise Exception('No data provided and could not load data from file') from e    
+            params['data'] = io.load_numpy_data(data_file, filepath)
+        except (ValueError, FileNotFoundError) as e:
+            raise RuntimeError(f'No data provided and failed to load data: {e}.') from e
     return params
 
 
-def read_config_file(config_file):
-    if config_file:
-        with open(config_file, 'r') as f:
-            try:
-                return yaml.safe_load(f)
-            except yaml.YAMLError as exc:
-                raise Exception(f'Error reading config file {f}') from exc
-    else:
-        return {}
-
-
 def get_params(config_file, overrides):
-    params = read_config_file(config_file)
+    params = io.read_config_file(config_file)
     params.update(overrides)
     return params
 
