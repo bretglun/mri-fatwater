@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-mri-fatwater = "mri_fatwater.cli:main"
+fatwater = "mri_fatwater.cli:main"
 
 [build-system]
 requires = ["hatchling"]
