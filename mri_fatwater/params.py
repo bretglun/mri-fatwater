@@ -117,13 +117,14 @@ class ModelParams:
         self.alpha = np.zeros([M, P], dtype=np.float32)
         self.alpha[0, 0] = 1.  # Water component
 
-        if self.relAmps is not None:
-            for (p, amp) in enumerate(self.relAmps):
-                self.alpha[1, p+1] = float(amp)
-        elif P==2:
-            self.alpha[1, 1] = 1. # Single fat peak
-        else:
+        if P==2:
+            self.relAmps = tuple([1.]) # Single fat peak
+        if self.relAmps is None:
             raise ValueError(f'Relative amplitudes not provided for the {P-1} fat peaks.')
+        if len(self.relAmps) != P-1:
+            raise ValueError(f'Relative amplitudes provided for {len(self.relAmps)} fat peaks, expected {P-1}.')
+        for (p, amp) in enumerate(self.relAmps):
+            self.alpha[1, p+1] = float(amp)
     
     @property
     def M(self):
