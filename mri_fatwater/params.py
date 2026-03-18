@@ -28,11 +28,12 @@ class DataParams:
     temperature: Optional[float] = None
     offresCenter: float = 0. # [ppm]
 
-    def __init__(self, echoes=None, slices=None, clockwise=True, **overrides):
+    def __init__(self, echo_dim=0, echoes=None, slices=None, clockwise=True, **overrides):
         init_dataclass(self, **overrides)
         
         if not isinstance(self.data, np.ndarray) or self.data.ndim != 4:
             raise ValueError('DataParams requires a 4D numpy array "data" with dimensions (N, nz, ny, nx)')
+        self.data = np.moveaxis(self.data, echo_dim, 0) # Put echo dim first
         if len(self.t) != self.data.shape[0]:
             raise ValueError(f'Number of time shifts ({len(self.t)}) does not match number of echoes in data ({self.data.shape[0]})')
         if echoes is not None:
@@ -174,7 +175,7 @@ def load_data(data_file, filepath):
     if not Path(filepath / data_file).is_file():
         raise FileNotFoundError(f'Could not find data file "{data_file}" in path "{filepath}"')
     data_file = Path(filepath / data_file)
-    return np.moveaxis(np.load(data_file), -1, 0)
+    return np.load(data_file)
 
 
 def prepare_data_params(data, data_params, data_param_file):

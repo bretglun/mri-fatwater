@@ -1,4 +1,5 @@
 file: ../data/17.npy           # data file
+echo_dim: 0                    # data dimension with echoes
 t: [0.00287, 0.00607, 0.00927] # [sec]
 B0: 1.494                      # [T]
 voxelsize: [1.5, 1.5, 5.0]     # [mm]
