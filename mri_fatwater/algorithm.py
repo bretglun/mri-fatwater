@@ -4,48 +4,48 @@ from skimage.filters import threshold_otsu
 from .constants import GYRO
 
 
-def QPBO(D, Vx, Vy, Vz):
+def get_neighbour_indices(neighbourhood, shape):
+    assert neighbourhood.shape[1] == len(shape)
+    indices = np.arange(np.prod(shape)).reshape(shape)
+    ngb_indices = []
+    for offset in neighbourhood:
+        ngb_index = np.roll(indices, shift=-offset, axis=range(indices.ndim))
+        for axis, shift in enumerate(offset):
+            slices = [slice(None)] * indices.ndim
+            if shift < 0:
+                raise NotImplementedError(f'Only positive neighbour offsets supported, got {neighbourhood}')
+            if shift > 0:
+                slices[axis] = slice(-shift, shape[axis])
+                ngb_index[tuple(slices)] = -1 # mark off-edge neighbours
+        ngb_indices.append(ngb_index.flatten())
+    return np.stack(ngb_indices, axis=0) # shape: (num_ngb, num_voxels)
+
+
+def QPBO(D, V, shape, neighbourhood):
+    num_neighbours = neighbourhood.shape[0]
+    num_voxels = np.prod(shape)
+
+    assert V.shape == (4, num_neighbours, num_voxels)
+
     graph = tq.QPBOFloat()
-    nx, ny, nz = D.shape[1:]
-    numNodes = nx * ny *nz
-    graph.add_node(numNodes)
+    graph.add_node(num_voxels)
 
-    # Add unary terms:
-    for i in range(numNodes):
-        (x, y, z) = np.unravel_index(i, (nx, ny, nz))
-        graph.add_unary_term(i, D[0, x, y, z], D[1, x, y, z])
-    
-    # Add binary terms in x-direction:
-    for z in range(nz):
-        for y in range(ny):
-            for x in range(nx-1):
-                i = np.ravel_multi_index((x, y, z), (nx, ny, nz)) # node index
-                j = np.ravel_multi_index((x+1, y, z), (nx, ny, nz)) # x neighbor node index
-                graph.add_pairwise_term(i, j, Vx[0, x, y, z], Vx[1, x, y, z], Vx[2, x, y, z], Vx[3, x, y, z])
-    
-    # Add binary terms in y-direction
-    for z in range(nz):
-        for y in range(ny-1):
-            for x in range(nx) :
-                i = np.ravel_multi_index((x, y, z), (nx, ny, nz)) # node index
-                j = np.ravel_multi_index((x, y+1, z), (nx, ny, nz)) # y neighbor node index
-                graph.add_pairwise_term(i, j, Vy[0, x, y, z], Vy[1, x, y, z], Vy[2, x, y, z], Vy[3, x, y, z])
+    ngb_index = get_neighbour_indices(neighbourhood, shape)
 
-    # Add binary terms in z-direction
-    for z in range(nz-1):
-        for y in range(ny):
-            for x in range(nx):
-                i = np.ravel_multi_index((x, y, z), (nx, ny, nz)) # node index
-                j = np.ravel_multi_index((x, y, z+1), (nx, ny, nz)) # z neighbor node index
-                graph.add_pairwise_term(i, j, Vz[0, x, y, z], Vz[1, x, y, z], Vz[2, x, y, z], Vz[3, x, y, z])
-
+    for i in range(num_voxels):
+        graph.add_unary_term(i, D[0, i], D[1, i])
+        for k in range(num_neighbours): # loop over neighbourhood
+            j = ngb_index[k, i]
+            if j > 0:
+                graph.add_pairwise_term(i, j, *V[:, k, i])
+        
     graph.solve()
 
-    label = np.zeros(numNodes)
-    for i in range(numNodes):
+    label = np.zeros(num_voxels)
+    for i in range(num_voxels):
         label[i] = graph.get_label(i)
 
-    return label.reshape((nx, ny, nz))
+    return label.reshape(shape)
 
 
 # Calculate LS error J as function of R2*
@@ -190,6 +190,11 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     # Prepare MRF
     print('Preparing MRF...', end='')
     # Prepare discontinuity costs
+    neighbourhood = np.array([
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1]
+    ])
     
     # 2nd derivative of residual function
     # NOTE: No division by square(steplength) since
@@ -206,7 +211,7 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     OP = (1-np.cos(2*np.pi*(np.arange(nB0)-offresCenter)/nB0)) / 2 * offresPenalty
 
     D = np.array([J[A.flatten(), vxls].reshape(A.shape) + OP[A],
-                  J[B.flatten(), vxls].reshape(A.shape) + OP[B]])
+                  J[B.flatten(), vxls].reshape(A.shape) + OP[B]]).reshape(2, -1)
     
     print('DONE')
 
@@ -229,8 +234,17 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
                       V[abs(B[:,:,:-1]-A[:,:,1:])],
                       V[abs(B[:,:,:-1]-B[:,:,1:])]])
 
+        Vx = np.pad(Vx, ((0, 0), (0, 1), (0, 0), (0, 0)))
+        Vx = Vx.reshape(4, -1)
+        Vy = np.pad(Vy, ((0, 0), (0, 0), (0, 1), (0, 0)))
+        Vy = Vy.reshape(4, -1)
+        Vz = np.pad(Vz, ((0, 0), (0, 0), (0, 0), (0, 1)))
+        Vz = Vz.reshape(4, -1)
+
+        Vs = np.stack([Vx, Vy, Vz], axis=1) # shape (4, num_ngb, num_voxels)
+
         print('Solving MRF using QPBO...', end='')
-        label = QPBO(D, Vx, Vy, Vz)
+        label = QPBO(D, Vs, A.shape, neighbourhood)
         print('DONE')
 
         dB0[label == 0] = A[label == 0]
