@@ -1,6 +1,6 @@
 [project]
 name = "mri-fatwater"
-version = "1.0.0"
+version = "1.1.2"
 description = "MRI algorithms for fat-water separation based on chemical shift with B0-correction"
 authors = [
     { name = "Johan Berglund", email = "berglund.hpj@gmail.com" },
@@ -15,8 +15,12 @@ dependencies = [
     "thinqpbo>=0.1.5",
 ]
 
+[project.urls]
+Homepage = "https://github.com/bretglun/mri-fatwater"
+Repository = "https://github.com/bretglun/mri-fatwater"
+
 [project.scripts]
-mri-fatwater = "mri_fatwater.cli:main"
+fatwater = "mri_fatwater.cli:main"
 
 [build-system]
 requires = ["hatchling"]

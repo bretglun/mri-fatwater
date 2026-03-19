@@ -21,3 +21,6 @@ build
 *.pyc
 TODOs.txt
 TODO.md
+
+*.npy
+!mri_fatwater/data/17.npy
