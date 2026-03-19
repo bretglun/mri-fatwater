@@ -17,7 +17,7 @@ def get_example_param_files():
 def main():
     param_files = get_example_param_files()
     example_hint = ''
-    if all(p is not None for p in param_files):
+    if all(p is not None for p in param_files.values()):
         example_hint = f'''Example parameter files:\n{param_files['data']}\n{param_files['algo']}\n{param_files['model']}\n\nExample usage:\nfatwater -d {param_files['data']} -a {param_files['algo']} -m {param_files['model']} -o results'''
         
     # Initiate command line parser
