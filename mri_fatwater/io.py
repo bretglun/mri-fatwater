@@ -22,7 +22,7 @@ def load_numpy_data(data_file, filepath):
     if not data_file:
         raise ValueError('No data file specified in parameters')
     
-    data_file = Path(filepath / data_file)
+    data_file = Path(filepath) / data_file
     
     if not data_file.is_file():
         raise FileNotFoundError(f'Could not find data file "{data_file}" in path "{filepath}"')

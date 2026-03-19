@@ -8,11 +8,7 @@ import time
 from mri_fatwater import fatwater, io
 
 
-def demo_with_param_files():
-    root_path = Path(__file__).resolve().parent.parent.absolute()
-    data_path = root_path / 'data'
-    config_path = root_path / 'configs'
-
+def demo_with_param_files(data_path, config_path):
     data_param_file = data_path / '17.yml'
     algo_param_file = config_path / 'algoParams.yml'
     model_param_file = config_path / 'modelParams.yml'
@@ -28,10 +24,7 @@ def demo_with_param_files():
     io.save(results, data_path / '17_REC')
 
 
-def demo_with_param_dicts():
-    root_path = Path(__file__).resolve().parent.parent.absolute()
-    data_path = root_path / 'data'
-
+def demo_with_param_dicts(data_path):
     data = io.load_numpy_data('17.npy', data_path)
     
     t = time.time()
@@ -52,5 +45,9 @@ def demo_with_param_dicts():
 
 
 if __name__ == '__main__':
-    #demo_with_param_files()
-    demo_with_param_dicts()
+    root_path = Path(__file__).resolve().parent.parent.absolute()
+    data_path = root_path / 'mri_fatwater' / 'data'
+    config_path = root_path / 'mri_fatwater' / 'configs'
+
+    #demo_with_param_files(data_path, config_path)
+    demo_with_param_dicts(data_path)

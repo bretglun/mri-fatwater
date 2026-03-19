@@ -34,7 +34,7 @@ uv sync
 fatwater -h
 
 # Run with parameter files
-fatwater -d configs/dataParams.yml -a configs/algoParams.yml -m configs/modelParams.yml -o output_dir/
+fatwater -d mri_fatwater/configs/dataParams.yml -a mri_fatwater/configs/algoParams.yml -m mri_fatwater/configs/modelParams.yml -o output_dir/
 ```
 
 ### Python API
@@ -44,9 +44,9 @@ Example using config files:
 from mri_fatwater import fatwater, io
 
 results = fatwater.separate(
-    data_param_file='configs/dataParams.yml',
-    algo_param_file='configs/algoParams.yml',
-    model_param_file='configs/modelParams.yml'
+    data_param_file='mri_fatwater/configs/dataParams.yml',
+    algo_param_file='mri_fatwater/configs/algoParams.yml',
+    model_param_file='mri_fatwater/configs/modelParams.yml'
 )
 io.save(results, 'output_dir/')
 ```
@@ -56,7 +56,8 @@ Example using config dicts:
 ```python
 from mri_fatwater import fatwater, io
 
-data = io.load_numpy_data('17.npy', 'data')
+data_path = 'mri_fatwater/data'
+data = io.load_numpy_data('17.npy', data_path)
 
 results = fatwater.separate(
     data=data,
@@ -69,7 +70,7 @@ results = fatwater.separate(
         'fatCS': [5.3, 4.31, 2.76, 2.1, 1.3, 0.9], 
         'relAmps': [0.048, 0.039, 0.004, 0.128, 0.693, 0.087]}
     )
-io.save(results, data_path / '17_REC')
+io.save(results, data_path + '/17_REC')
 ```
 
 See [scripts/demo.py](scripts/demo.py) for a complete example.
@@ -79,7 +80,7 @@ Input parameters can be provided as:
 * Human-readable YAML configuration files
 * Python dictionaries
 
-Example configuration files are available in the [configs/](configs) directory.
+Example configuration files are available in the [mri_fatwater/configs/](mri_fatwater/configs) directory.
 Input data should be a complex NumPy array or a `.npy` file specified in the data configuration file with chemical shift encoded "echoes" along the first dimension.
 
 ## Dependencies

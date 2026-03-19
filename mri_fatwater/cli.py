@@ -11,12 +11,12 @@ def get_repo_url():
 
 
 def get_example_param_files():
-    path = Path(files('mri_fatwater')).parent / 'configs'
+    path = Path(files('mri_fatwater')) / 'configs'
     url = get_repo_url()
     param_files = {}
     for par in ('data', 'algo', 'model'):
         file = path / f'{par}Params.yml'
-        param_files[par] = file if file.is_file() else f'{url}/tree/master/configs/{par}Params.yml'
+        param_files[par] = file if file.is_file() else f'{url}/tree/master/mri_fatwater/configs/{par}Params.yml'
     return param_files
 
 
