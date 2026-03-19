@@ -15,6 +15,10 @@ dependencies = [
     "thinqpbo>=0.1.5",
 ]
 
+[project.urls]
+Homepage = "https://github.com/bretglun/mri-fatwater"
+Repository = "https://github.com/bretglun/mri-fatwater"
+
 [project.scripts]
 fatwater = "mri_fatwater.cli:main"
 

@@ -2,23 +2,29 @@ import argparse
 import sys
 from mri_fatwater import fatwater, io
 from importlib.resources import files
+from importlib.metadata import metadata
 from pathlib import Path
+
+
+def get_repo_url():
+    return metadata('mri-fatwater').get('Project-URL').split(', ')[-1]
 
 
 def get_example_param_files():
     path = Path(files('mri_fatwater')).parent / 'configs'
+    url = get_repo_url()
     param_files = {}
     for par in ('data', 'algo', 'model'):
         file = path / f'{par}Params.yml'
-        param_files[par] = file if file.is_file() else None
+        param_files[par] = file if file.is_file() else f'{url}/tree/master/configs/{par}Params.yml'
     return param_files
 
 
 def main():
     param_files = get_example_param_files()
-    example_hint = ''
-    if all(p is not None for p in param_files.values()):
-        example_hint = f'''Example parameter files:\n{param_files['data']}\n{param_files['algo']}\n{param_files['model']}\n\nExample usage:\nfatwater -d {param_files['data']} -a {param_files['algo']} -m {param_files['model']} -o results'''
+    example_hint = f'Example parameter files:\n{param_files['data']}\n{param_files['algo']}\n{param_files['model']}'
+    if all(Path(file).is_file() for file in param_files.values()):
+        example_hint += f'\n\nExample usage:\nfatwater -d {param_files['data']} -a {param_files['algo']} -m {param_files['model']} -o results'
         
     # Initiate command line parser
     parser = argparse.ArgumentParser(
