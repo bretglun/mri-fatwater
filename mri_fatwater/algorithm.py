@@ -4,46 +4,49 @@ from skimage.filters import threshold_otsu
 from .constants import GYRO
 
 
-def get_neighbour_indices(neighbourhood, shape):
+def get_neighbour_indices(neighbourhood, shape, cyclic):
     assert neighbourhood.shape[1] == len(shape)
-    indices = np.arange(np.prod(shape)).reshape(shape)
-    ngb_indices = []
-    for offset in neighbourhood:
-        ngb_index = np.roll(indices, shift=-offset, axis=range(indices.ndim))
-        for axis, shift in enumerate(offset):
+    assert len(shape) == len(cyclic)
+    num_ngb = neighbourhood.shape[0]
+    num_voxels = np.prod(shape)
+    indices = np.arange(num_voxels).reshape(shape)
+    ngb_indices = np.empty(shape=(num_ngb, *shape), dtype=int)
+    edge_ngb = np.full(shape=(num_ngb, *shape), fill_value=False)
+    for ngb in range(num_ngb):
+        for axis, shift in enumerate(neighbourhood[ngb]):
+            if cyclic[axis] or shift==0:
+                continue
             slices = [slice(None)] * indices.ndim
             if shift < 0:
-                raise NotImplementedError(f'Only positive neighbour offsets supported, got {neighbourhood}')
+                slices[axis] = slice(0, -shift)
             if shift > 0:
                 slices[axis] = slice(-shift, shape[axis])
-                ngb_index[tuple(slices)] = -1 # mark off-edge neighbours
-        ngb_indices.append(ngb_index.flatten())
-    return np.stack(ngb_indices, axis=0) # shape: (num_ngb, num_voxels)
+            edge_ngb[ngb, *tuple(slices)] = True
+        ngb_indices[ngb] = np.roll(indices, shift=-neighbourhood[ngb], axis=range(indices.ndim))
+    return ngb_indices.reshape(num_ngb, num_voxels), edge_ngb.reshape(num_ngb, num_voxels)
 
 
-def QPBO(D, V, shape, neighbourhood):
-    num_neighbours = neighbourhood.shape[0]
+def QPBO(D, V, shape, ngb_index):
+    num_neighbour_pairs = ngb_index.shape[0]
     num_voxels = np.prod(shape)
 
-    assert V.shape == (4, num_neighbours, num_voxels)
+    assert V.shape == (4, num_neighbour_pairs, num_voxels)
 
     graph = tq.QPBOFloat()
     graph.add_node(num_voxels)
 
-    ngb_index = get_neighbour_indices(neighbourhood, shape)
-
-    for i in range(num_voxels):
-        graph.add_unary_term(i, D[0, i], D[1, i])
-        for k in range(num_neighbours): # loop over neighbourhood
-            j = ngb_index[k, i]
-            if j > 0:
-                graph.add_pairwise_term(i, j, *V[:, k, i])
+    for q in range(num_voxels):
+        graph.add_unary_term(q, D[0, q], D[1, q])
+        for k in range(num_neighbour_pairs): # loop over neighbourhood
+            p = ngb_index[k, q]
+            if any(V[:, k, q]):
+                graph.add_pairwise_term(p, q, *V[:, k, q])
         
     graph.solve()
 
     label = np.zeros(num_voxels)
-    for i in range(num_voxels):
-        label[i] = graph.get_label(i)
+    for q in range(num_voxels):
+        label[q] = graph.get_label(q)
 
     return label.reshape(shape)
 
@@ -61,31 +64,32 @@ def getR2Residuals(Y, dB0, C, nB0, nR2, D=None):
     return J
 
 
-def ICM(prev, L, maxICMUpdate, nICMiter, J, V, wx, wy, wz):
+def get_updates(max_update):
+    updates = [0] * (2 * max_update + 1)  # Update order
+    updates[2:len(updates):2] = list(range(1, max_update + 1)) # Even are positive
+    updates[1:len(updates):2] = list(range(-1, -max_update - 1, -1)) # Odd are negative
+    return updates
+
+
+def ICM(prev, L, max_update, num_iters, J, V, w, ngb_indices):
+    updates = get_updates(max_update)
+    shape = prev.shape
+    prev = prev.flatten()
     current = np.array(prev)
-    for k in range(nICMiter):  # ICM iterate
-        print(str(k+1), ', ', end='')
+    for iter in range(num_iters):  # ICM iterate
+        print(f'{str(iter+1)}, ', end='')
         prev[:] = current[:]
         min_cost = np.full(current.shape, np.inf)
 
-        updates = [0]*(2*maxICMUpdate+1)  # Update order
-        # Even are positive
-        updates[2:len(updates):2] = list(range(1, maxICMUpdate+1))
-        # Odd are negative
-        updates[1:len(updates):2] = list(range(-1, -maxICMUpdate-1, -1))
         for update in updates:
-            cost = J[(prev.flatten()+update) % L, range(J.shape[1])].reshape(prev.shape)  # Unary cost
+            cost = J[(prev.flatten() + update) % L, range(J.shape[1])] # Unary cost
             # Binary costs:
-            cost[1:,:,:]  += wx * V[abs((prev[1:,:,:]  + update) % L - prev[:-1,:,:])]
-            cost[:-1,:,:] += wx * V[abs((prev[:-1,:,:] + update) % L - prev[1:,:,:])]
-            cost[:,1:,:]  += wy * V[abs((prev[:,1:,:]  + update) % L - prev[:,:-1,:])]
-            cost[:,:-1,:] += wy * V[abs((prev[:,:-1,:] + update) % L - prev[:,1:,:])]
-            cost[:,:,1:]  += wz * V[abs((prev[:,:,1:]  + update) % L - prev[:,:,:-1])]
-            cost[:,:,:-1] += wz * V[abs((prev[:,:,:-1] + update) % L - prev[:,:,1:])]
-
+            for k in range(ngb_indices.shape[0]):
+                cost[ngb_indices[k]] += w[k].flatten() * V[abs((prev[ngb_indices[k]]  + update) % L - prev)]
+                cost += w[k].flatten() * V[abs((prev + update) % L - prev[ngb_indices[k]])]
             current[cost < min_cost] = (prev[cost < min_cost]+update) % L
             min_cost[cost < min_cost] = cost[cost < min_cost]
-    return current
+    return current.reshape(shape)
 
 
 # Find all local minima of discretely evaluated function f(t) with period T
@@ -120,7 +124,7 @@ def isotropy3D(dx, dy, dz): return (dx*dy*dz)**(2/3)/(2*(dx*dy+dx*dz+dy*dz))
 
 
 def getHigherLevel(level):
-    high = {'L': level['L']+1}
+    high = {'L': level['L'] + 1}
     # Isotropy promoting downsampling
     maxIsotropy = 0
     for sx in [1, 2]:
@@ -128,42 +132,35 @@ def getHigherLevel(level):
             for sz in [1, 2]:  # Loop over all 2^3=8 downscaling combinations
                 # at least one dimension must change and the size of all
                 # dimensions at lower level must permit any downscaling
-                if (sx*sy*sz > 1 and level['nx'] >= sx and
-                   level['ny'] >= sy and level['nz'] >= sz):
-                    if (level['nx'] == 1):
-                        iso = isotropy2D(level['dy']*sy, level['dz']*sz)
-                    elif (level['ny'] == 1):
-                        iso = isotropy2D(level['dx']*sx, level['dz']*sz)
-                    elif (level['nz'] == 1):
-                        iso = isotropy2D(level['dx']*sx, level['dy']*sy)
+                if (sx*sy*sz > 1 and level['shape'][0] >= sx and
+                   level['shape'][1] >= sy and level['shape'][2] >= sz):
+                    if (level['shape'][0] == 1):
+                        iso = isotropy2D(level['voxelsize'][1]*sy, level['voxelsize'][2]*sz)
+                    elif (level['shape'][1] == 1):
+                        iso = isotropy2D(level['voxelsize'][0]*sx, level['voxelsize'][2]*sz)
+                    elif (level['shape'][2] == 1):
+                        iso = isotropy2D(level['voxelsize'][0]*sx, level['voxelsize'][1]*sy)
                     else:
                         iso = isotropy3D(
-                          level['dx']*sx, level['dy']*sy, level['dz']*sz)
+                          level['voxelsize'][0]*sx, level['voxelsize'][1]*sy, level['voxelsize'][2]*sz)
                     if iso > maxIsotropy:
                         maxIsotropy = iso
-                        high['sx'] = sx
-                        high['sy'] = sy
-                        high['sz'] = sz
-    high['dx'] = level['dx']*high['sx']
-    high['dy'] = level['dy']*high['sy']
-    high['dz'] = level['dz']*high['sz']
-
-    high['nx'] = int(np.ceil(level['nx']/high['sx']))
-    high['ny'] = int(np.ceil(level['ny']/high['sy']))
-    high['nz'] = int(np.ceil(level['nz']/high['sz']))
+                        high['block'] = (sx, sy, sz)
+    high['voxelsize'] = tuple(vs * s for vs, s in zip(level['voxelsize'], high['block']))
+    high['shape'] = tuple(int(np.ceil(n/s)) for n, s in zip(level['shape'], high['block']))
     return high
 
 
 def getHighLevelResidualImage(J, high, level):
-    Jhigh = np.zeros((J.shape[0], level['nx']+level['nx'] % high['sx'],
-                                  level['ny']+level['ny'] % high['sy'],
-                                  level['nz']+level['nz'] % high['sz']))
-    Jhigh[:, :level['nx'], :level['ny'], :level['nz']] = J
-    return Jhigh.reshape((J.shape[0], high['nx'], high['sx'], high['ny'], high['sy'], high['nz'], high['sz'])).mean(axis=(2,4,6))
+    Jhigh = np.zeros((J.shape[0], level['shape'][0]+level['shape'][0] % high['block'][0],
+                                  level['shape'][1]+level['shape'][1] % high['block'][1],
+                                  level['shape'][2]+level['shape'][2] % high['block'][2]))
+    Jhigh[:, :level['shape'][0], :level['shape'][1], :level['shape'][2]] = J
+    return Jhigh.reshape((J.shape[0], high['shape'][0], high['block'][0], high['shape'][1], high['block'][1], high['shape'][2], high['block'][2])).mean(axis=(2,4,6))
 
 
 def getB0fromHighLevel(dB0high, level, high):
-    return np.repeat(np.repeat(np.repeat(dB0high, high['sz'], axis=2), high['sy'], axis=1), high['sx'], axis=0)[:level['nx'], :level['ny'], :level['nz']]
+    return np.repeat(np.repeat(np.repeat(dB0high, high['block'][2], axis=2), high['block'][1], axis=1), high['block'][0], axis=0)[:level['shape'][0], :level['shape'][1], :level['shape'][2]]
 
 
 def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
@@ -183,30 +180,39 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
         dB0high = calculateFieldMap(nB0, high, graphcutLevel, multiScale,
                                     maxICMupdate, nICMiter, Jhigh, V, mu,
                                     offresPenalty, offresCenter).reshape(
-                                    high['nx'], high['ny'], high['nz'])
+                                    high['shape'])
         dB0 = getB0fromHighLevel(dB0high, level, high)
-        print(f'Level ({level['nx']},{level['ny']},{level['nz']}): ')
+        print(f'Level {level['shape']}: ')
 
     # Prepare MRF
     print('Preparing MRF...', end='')
     # Prepare discontinuity costs
     neighbourhood = np.array([
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1]
+        [ 1,  0,  0],
+        [ 0,  1,  0],
+        [ 0,  0,  1]
     ])
+
+    cyclic = [False] * len(level['shape'])
+
+    ngb_indices, edge_ngb = get_neighbour_indices(neighbourhood, level['shape'], cyclic)
+    num_ngb = ngb_indices.shape[0]
     
     # 2nd derivative of residual function
     # NOTE: No division by square(steplength) since
     # square(steplength) not included in V    
-    J.shape = (J.shape[0], np.prod(J.shape[1:]))
-    vxls = range(J.shape[1])
-    ddJ = (J[(A.flatten()+1) % nB0, vxls]+J[(A.flatten()-1) % nB0, vxls]-2*J[A.flatten(), vxls]).reshape(A.shape)
+    J.shape = (J.shape[0], np.prod(level['shape']))
+    vxls = range(np.prod(level['shape']))
+    ddJ = (J[(A.flatten()+1) % nB0, vxls]+J[(A.flatten()-1) % nB0, vxls]-2*J[A.flatten(), vxls])
 
-    wx = np.minimum(ddJ[:-1,:,:], ddJ[1:,:,:]) * mu / level['dx']
-    wy = np.minimum(ddJ[:,:-1,:], ddJ[:,1:,:]) * mu / level['dy']
-    wz = np.minimum(ddJ[:,:,:-1], ddJ[:,:,1:]) * mu / level['dz']
-
+    w = np.zeros((num_ngb, *ddJ.shape))
+    for k, ngb in enumerate(neighbourhood):
+        distance = np.linalg.norm(ngb * level['voxelsize'])
+        ddJq = ddJ[ngb_indices[k]]
+        w[k] = np.minimum(ddJ, ddJq) * mu / distance
+        w[k][edge_ngb[k]] = 0
+    w.reshape((num_ngb, *A.shape))
+    
     # Prepare data fidelity costs
     OP = (1-np.cos(2*np.pi*(np.arange(nB0)-offresCenter)/nB0)) / 2 * offresPenalty
 
@@ -218,33 +224,16 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     # QPBO
     graphcut = level['L'] >= graphcutLevel
     if graphcut:
-        Vx = np.array(wx*[
-                      V[abs(A[:-1,:,:]-A[1:,:,:])],
-                      V[abs(A[:-1,:,:]-B[1:,:,:])],
-                      V[abs(B[:-1,:,:]-A[1:,:,:])],
-                      V[abs(B[:-1,:,:]-B[1:,:,:])]])
-        Vy = np.array(wy*[
-                      V[abs(A[:,:-1,:]-A[:,1:,:])],
-                      V[abs(A[:,:-1,:]-B[:,1:,:])],
-                      V[abs(B[:,:-1,:]-A[:,1:,:])],
-                      V[abs(B[:,:-1,:]-B[:,1:,:])]])
-        Vz = np.array(wz*[
-                      V[abs(A[:,:,:-1]-A[:,:,1:])],
-                      V[abs(A[:,:,:-1]-B[:,:,1:])],
-                      V[abs(B[:,:,:-1]-A[:,:,1:])],
-                      V[abs(B[:,:,:-1]-B[:,:,1:])]])
-
-        Vx = np.pad(Vx, ((0, 0), (0, 1), (0, 0), (0, 0)))
-        Vx = Vx.reshape(4, -1)
-        Vy = np.pad(Vy, ((0, 0), (0, 0), (0, 1), (0, 0)))
-        Vy = Vy.reshape(4, -1)
-        Vz = np.pad(Vz, ((0, 0), (0, 0), (0, 0), (0, 1)))
-        Vz = Vz.reshape(4, -1)
-
-        Vs = np.stack([Vx, Vy, Vz], axis=1) # shape (4, num_ngb, num_voxels)
+        Vs = np.zeros((4, *ngb_indices.shape), dtype=float)
+        for q in range(num_ngb):
+            Vs[:, q, :] = np.array(w[q].flatten()*[
+                V[abs(A.flatten()-A.flatten()[ngb_indices[q]])],
+                V[abs(A.flatten()-B.flatten()[ngb_indices[q]])],
+                V[abs(B.flatten()-A.flatten()[ngb_indices[q]])],
+                V[abs(B.flatten()-B.flatten()[ngb_indices[q]])]])
 
         print('Solving MRF using QPBO...', end='')
-        label = QPBO(D, Vs, A.shape, neighbourhood)
+        label = QPBO(D, Vs, A.shape, ngb_indices)
         print('DONE')
 
         dB0[label == 0] = A[label == 0]
@@ -253,7 +242,7 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     # ICM
     if nICMiter > 0:
         print('Solving MRF using ICM...', end='')
-        dB0 = ICM(dB0, nB0, maxICMupdate, nICMiter, J, V, wx, wy, wz)
+        dB0 = ICM(dB0, nB0, maxICMupdate, nICMiter, J, V, w, ngb_indices)
         print('DONE')
     return dB0
 
@@ -383,9 +372,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        level = {'L': 0, 'nx': Y.shape[1], 'ny': Y.shape[2], 'nz': Y.shape[3],
-                 'sx': 1, 'sy': 1, 'sz': 1,
-                 'dx': dPar.voxelsize[0], 'dy': dPar.voxelsize[1], 'dz': dPar.voxelsize[2]}
+        level = {'L': 0, 'shape': Y.shape[1:], 'block': (1,1,1), 'voxelsize': dPar.voxelsize}
         scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
         J = getB0Residuals(Y, C, aPar.nB0, aPar.iR2cand, D, scale)
         offresPenalty = aPar.offresPenalty
