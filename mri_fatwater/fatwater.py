@@ -12,8 +12,8 @@ def autocrop(dPar):
     for dim in range(3):
         profile = abs_img.mean(axis=tuple(i for i in range(3) if i != dim))
         foreground_indices = np.where(profile > threshold)[0]
-        crop[2-dim] = int(foreground_indices[0])
-        crop[5-dim] = int(foreground_indices[-1] + 1)
+        crop[dim] = int(foreground_indices[0])
+        crop[dim + 3] = int(foreground_indices[-1] + 1)
     
     if tuple(crop[:3]) == (0, 0, 0) and tuple(crop[3:]) == abs_img.shape[::-1]:
         return dPar
