@@ -107,15 +107,15 @@ def merge_slice_results(slice_results):
 
 def separate_slices(dPar, aPar, mPar):
     slice_results = []
-    for slice in range(dPar.nz):
-        print(f'Processing slice {slice + 1}/{dPar.nz}...')
+    for slice in range(dPar.data.shape[3]):
+        print(f'Processing slice {slice + 1}/{dPar.data.shape[3]}...')
         slice_dPar = replace(dPar, slices=[slice])
         slice_results.append(separate_volume(slice_dPar, aPar, mPar))
     return merge_slice_results(slice_results)
 
 
 def separate_with_param_objects(dPar, aPar, mPar):
-    if aPar.use3D or dPar.nz == 1:
+    if aPar.use3D or dPar.data.shape[3] == 1:
         return separate_volume(dPar, aPar, mPar)
     return separate_slices(dPar, aPar, mPar)
 
