@@ -101,7 +101,7 @@ def merge_slice_results(slice_results):
     results = slice_results[0]
     for slice_result in slice_results[1:]:
         for result_type in slice_result:
-            results[result_type] = np.concatenate((results[result_type], slice_result[result_type]))
+            results[result_type] = np.concatenate((results[result_type], slice_result[result_type]), axis=2)
     return results
 
 
