@@ -12,10 +12,10 @@ def autocrop(dPar):
     for dim in range(3):
         profile = abs_img.mean(axis=tuple(i for i in range(3) if i != dim))
         foreground_indices = np.where(profile > threshold)[0]
-        crop[2-dim] = int(foreground_indices[0])
-        crop[5-dim] = int(foreground_indices[-1] + 1)
+        crop[dim] = int(foreground_indices[0])
+        crop[dim + 3] = int(foreground_indices[-1] + 1)
     
-    if tuple(crop[:3]) == (0, 0, 0) and tuple(crop[3:]) == abs_img.shape[::-1]:
+    if tuple(crop[:3]) == (0, 0, 0) and tuple(crop[3:]) == abs_img.shape:
         return dPar
     
     print(f'Auto-cropping to FOV: [x0, y0, z0, x1, y1, z1] = {crop} ({np.prod([crop[3+i] - crop[i] for i in range(3)])/np.prod(abs_img.shape)*100:.1f}% of original FOV)')
@@ -101,21 +101,21 @@ def merge_slice_results(slice_results):
     results = slice_results[0]
     for slice_result in slice_results[1:]:
         for result_type in slice_result:
-            results[result_type] = np.concatenate((results[result_type], slice_result[result_type]))
+            results[result_type] = np.concatenate((results[result_type], slice_result[result_type]), axis=2)
     return results
 
 
 def separate_slices(dPar, aPar, mPar):
     slice_results = []
-    for slice in range(dPar.nz):
-        print(f'Processing slice {slice + 1}/{dPar.nz}...')
+    for slice in range(dPar.data.shape[3]):
+        print(f'Processing slice {slice + 1}/{dPar.data.shape[3]}...')
         slice_dPar = replace(dPar, slices=[slice])
         slice_results.append(separate_volume(slice_dPar, aPar, mPar))
     return merge_slice_results(slice_results)
 
 
 def separate_with_param_objects(dPar, aPar, mPar):
-    if aPar.use3D or dPar.nz == 1:
+    if aPar.use3D or dPar.data.shape[3] == 1:
         return separate_volume(dPar, aPar, mPar)
     return separate_slices(dPar, aPar, mPar)
 

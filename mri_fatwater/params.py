@@ -56,7 +56,7 @@ class DataParams:
             low = self.crop[:3]
             high = self.crop[3:6]
             if any(lo<0 or lo>N or hi<0 or hi>N or hi<=lo for lo, hi, N in zip(low, high, self.data.shape[1:])):
-                raise ValueError(f'Param "crop" [x0, y0, z0, x1, y1, z1] values must be within the image dimensions (nx={self.data.shape[1]}, ny={self.data.shape[2]}, nz={self.data.shape[3]})')
+                raise ValueError(f'Param "crop" [x0, y0, z0, x1, y1, z1] values must be within the image dimensions (nx={self.data.shape[1]}, ny={self.data.shape[2]}, nz={self.data.shape[3]}). Got crop={self.crop}')
             self.data = self.data[:, low[0]:high[0], low[1]:high[1], low[2]:high[2]]
         if not clockwise:
             np.conjugate(self.data, out=self.data)
