@@ -15,7 +15,7 @@ def autocrop(dPar):
         crop[dim] = int(foreground_indices[0])
         crop[dim + 3] = int(foreground_indices[-1] + 1)
     
-    if tuple(crop[:3]) == (0, 0, 0) and tuple(crop[3:]) == abs_img.shape[::-1]:
+    if tuple(crop[:3]) == (0, 0, 0) and tuple(crop[3:]) == abs_img.shape:
         return dPar
     
     print(f'Auto-cropping to FOV: [x0, y0, z0, x1, y1, z1] = {crop} ({np.prod([crop[3+i] - crop[i] for i in range(3)])/np.prod(abs_img.shape)*100:.1f}% of original FOV)')
