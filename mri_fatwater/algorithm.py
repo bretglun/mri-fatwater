@@ -26,42 +26,24 @@ def get_neighbour_indices(neighbourhood, shape, cyclic):
     return ngb_indices.reshape(num_ngb, num_voxels), edge_ngb.reshape(num_ngb, num_voxels)
 
 
-def QPBO(D, V, shape, ngb_index):
-    num_neighbour_pairs = ngb_index.shape[0]
-    num_voxels = np.prod(shape)
-
-    assert V.shape == (4, num_neighbour_pairs, num_voxels)
-
+def QPBO(D, V, ngb_index):
+    num_neighbours, num_voxels = ngb_index.shape
+    assert V.shape == (4, num_neighbours, num_voxels)
     graph = tq.QPBOFloat()
     graph.add_node(num_voxels)
 
     for q in range(num_voxels):
         graph.add_unary_term(q, D[0, q], D[1, q])
-        for k in range(num_neighbour_pairs): # loop over neighbourhood
+        for k in range(num_neighbours): # loop over neighbourhood
             p = ngb_index[k, q]
             if any(V[:, k, q]):
                 graph.add_pairwise_term(p, q, *V[:, k, q])
-        
     graph.solve()
 
     label = np.zeros(num_voxels)
     for q in range(num_voxels):
         label[q] = graph.get_label(q)
-
-    return label.reshape(shape)
-
-
-# Calculate LS error J as function of R2*
-def getR2Residuals(Y, dB0, C, nB0, nR2, D=None):
-    J = np.zeros(shape=(nR2, Y.shape[1], Y.shape[2], Y.shape[3]))
-    for b in range(nB0):
-        for r in range(nR2):
-            if not D:  # complex-valued estimates
-                y = Y[:, dB0 == b]
-            else:  # real-valued estimates
-                y = getRealDemodulated(Y[:, dB0 == b], D[r][b])[0]
-            J[r, dB0 == b] = np.linalg.norm(np.tensordot(C[r][b], y, axes=(1,0)), axis=0)**2
-    return J
+    return label
 
 
 def get_updates(max_update):
@@ -73,8 +55,6 @@ def get_updates(max_update):
 
 def ICM(prev, L, max_update, num_iters, J, V, w, ngb_indices):
     updates = get_updates(max_update)
-    shape = prev.shape
-    prev = prev.flatten()
     current = np.array(prev)
     for iter in range(num_iters):  # ICM iterate
         print(f'{str(iter+1)}, ', end='')
@@ -82,14 +62,14 @@ def ICM(prev, L, max_update, num_iters, J, V, w, ngb_indices):
         min_cost = np.full(current.shape, np.inf)
 
         for update in updates:
-            cost = J[(prev.flatten() + update) % L, range(J.shape[1])] # Unary cost
+            cost = J[(prev + update) % L, range(J.shape[1])] # Unary cost
             # Binary costs:
             for k in range(ngb_indices.shape[0]):
-                cost[ngb_indices[k]] += w[k].flatten() * V[abs((prev[ngb_indices[k]]  + update) % L - prev)]
-                cost += w[k].flatten() * V[abs((prev + update) % L - prev[ngb_indices[k]])]
-            current[cost < min_cost] = (prev[cost < min_cost]+update) % L
+                cost[ngb_indices[k]] += w[k] * V[abs((prev[ngb_indices[k]]  + update) % L - prev)]
+                cost += w[k] * V[abs((prev + update) % L - prev[ngb_indices[k]])]
+            current[cost < min_cost] = (prev[cost < min_cost] + update) % L
             min_cost[cost < min_cost] = cost[cost < min_cost]
-    return current.reshape(shape)
+    return current
 
 
 # Find all local minima of discretely evaluated function f(t) with period T
@@ -98,18 +78,14 @@ def findMinima(f): return np.where((f < np.roll(f, 1))*(f < np.roll(f, -1)))[0]
 
 # In each voxel, find two smallest local residual minima in a period of omega
 def findTwoSmallestMinima(J):
-    A = np.zeros(J.shape[1:], dtype=int)
-    B = np.zeros(J.shape[1:], dtype=int)
-    for x in range(J.shape[1]):
-        for y in range(J.shape[2]):
-            for z in range(J.shape[3]):
-                minima = sorted(findMinima(J[:,x,y,z]), key=lambda b: J[b,x,y,z])[:2]
-                if len(minima) == 2:
-                    A[x,y,z], B[x,y,z] = minima
-                elif len(minima) == 1:
-                    A[x,y,z] = B[x,y,z] = minima[0]
-                else:
-                    A[x,y,z] = B[x,y,z] = 0  # Assign dummy minimum
+    A = np.zeros(J.shape[1], dtype=int)
+    B = np.zeros(J.shape[1], dtype=int)
+    for q in range(J.shape[1]):
+        minima = sorted(findMinima(J[:, q]), key=lambda b: J[b, q])
+        if len(minima) >= 2:
+            A[q], B[q] = minima[:2]
+        elif len(minima) == 1:
+            A[q] = B[q] = minima[0]
     return A, B
 
 
@@ -152,15 +128,17 @@ def getHigherLevel(level):
 
 
 def getHighLevelResidualImage(J, high, level):
-    Jhigh = np.zeros((J.shape[0], level['shape'][0]+level['shape'][0] % high['block'][0],
-                                  level['shape'][1]+level['shape'][1] % high['block'][1],
-                                  level['shape'][2]+level['shape'][2] % high['block'][2]))
+    J = J.reshape(J.shape[0], *level['shape'])
+    Jhigh = np.zeros((J.shape[0], level['shape'][0] + level['shape'][0] % high['block'][0],
+                                  level['shape'][1] + level['shape'][1] % high['block'][1],
+                                  level['shape'][2] + level['shape'][2] % high['block'][2]))
     Jhigh[:, :level['shape'][0], :level['shape'][1], :level['shape'][2]] = J
-    return Jhigh.reshape((J.shape[0], high['shape'][0], high['block'][0], high['shape'][1], high['block'][1], high['shape'][2], high['block'][2])).mean(axis=(2,4,6))
+    Jhigh = Jhigh.reshape((J.shape[0], high['shape'][0], high['block'][0], high['shape'][1], high['block'][1], high['shape'][2], high['block'][2])).mean(axis=(2,4,6))
+    return Jhigh.reshape(Jhigh.shape[0], -1)
 
 
 def getB0fromHighLevel(dB0high, level, high):
-    return np.repeat(np.repeat(np.repeat(dB0high, high['block'][2], axis=2), high['block'][1], axis=1), high['block'][0], axis=0)[:level['shape'][0], :level['shape'][1], :level['shape'][2]]
+    return np.repeat(np.repeat(np.repeat(dB0high.reshape(high['shape']), high['block'][2], axis=2), high['block'][1], axis=1), high['block'][0], axis=0)[:level['shape'][0], :level['shape'][1], :level['shape'][2]].flatten()
 
 
 def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
@@ -170,7 +148,7 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
 
     # Multiscale recursion
     if dB0.size == 1:  # Trivial case at coarsest level with only one voxel
-        print('Level (1, 1, 1): Trivial case')
+        print(f'Level {level['shape']}: Trivial case')
         return dB0
 
     if multiScale:
@@ -179,8 +157,7 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
         # Recursion:
         dB0high = calculateFieldMap(nB0, high, graphcutLevel, multiScale,
                                     maxICMupdate, nICMiter, Jhigh, V, mu,
-                                    offresPenalty, offresCenter).reshape(
-                                    high['shape'])
+                                    offresPenalty, offresCenter)
         dB0 = getB0fromHighLevel(dB0high, level, high)
         print(f'Level {level['shape']}: ')
 
@@ -200,25 +177,20 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     
     # 2nd derivative of residual function
     # NOTE: No division by square(steplength) since
-    # square(steplength) not included in V    
-    J.shape = (J.shape[0], np.prod(level['shape']))
+    # square(steplength) not included in V
     vxls = range(np.prod(level['shape']))
-    ddJ = (J[(A.flatten()+1) % nB0, vxls]+J[(A.flatten()-1) % nB0, vxls]-2*J[A.flatten(), vxls])
+    ddJ = (J[(A+1) % nB0, vxls] + J[(A-1) % nB0, vxls] - 2 * J[A, vxls])
 
-    w = np.zeros((num_ngb, *ddJ.shape))
+    w = np.zeros((ngb_indices.shape))
     for k, ngb in enumerate(neighbourhood):
         distance = np.linalg.norm(ngb * level['voxelsize'])
         ddJq = ddJ[ngb_indices[k]]
         w[k] = np.minimum(ddJ, ddJq) * mu / distance
         w[k][edge_ngb[k]] = 0
-    w.reshape((num_ngb, *A.shape))
     
     # Prepare data fidelity costs
     OP = (1-np.cos(2*np.pi*(np.arange(nB0)-offresCenter)/nB0)) / 2 * offresPenalty
-
-    D = np.array([J[A.flatten(), vxls].reshape(A.shape) + OP[A],
-                  J[B.flatten(), vxls].reshape(A.shape) + OP[B]]).reshape(2, -1)
-    
+    D = np.array([J[A, vxls] + OP[A], J[B, vxls] + OP[B]])
     print('DONE')
 
     # QPBO
@@ -226,14 +198,14 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
     if graphcut:
         Vs = np.zeros((4, *ngb_indices.shape), dtype=float)
         for q in range(num_ngb):
-            Vs[:, q, :] = np.array(w[q].flatten()*[
-                V[abs(A.flatten()-A.flatten()[ngb_indices[q]])],
-                V[abs(A.flatten()-B.flatten()[ngb_indices[q]])],
-                V[abs(B.flatten()-A.flatten()[ngb_indices[q]])],
-                V[abs(B.flatten()-B.flatten()[ngb_indices[q]])]])
+            Vs[:, q, :] = np.array(w[q] * [
+                V[abs(A - A[ngb_indices[q]])],
+                V[abs(A - B[ngb_indices[q]])],
+                V[abs(B - A[ngb_indices[q]])],
+                V[abs(B - B[ngb_indices[q]])]])
 
         print('Solving MRF using QPBO...', end='')
-        label = QPBO(D, Vs, A.shape, ngb_indices)
+        label = QPBO(D, Vs, ngb_indices)
         print('DONE')
 
         dB0[label == 0] = A[label == 0]
@@ -264,17 +236,31 @@ def getRealDemodulated(Y, D):
     return np.concatenate((np.real(y), np.imag(y))), phi
 
 
+# Calculate LS error J as function of R2*
+def get_R2_residuals(Y, dB0, C, nB0, nR2, D=None):
+    J = np.zeros(shape=(nR2, *Y.shape[1:]))
+    for b in range(nB0):
+        for r in range(nR2):
+            if not D:  # complex-valued estimates
+                y = Y[:, dB0 == b]
+            else:  # real-valued estimates
+                y = getRealDemodulated(Y[:, dB0 == b], D[r][b])[0]
+            J[r, dB0 == b] = np.linalg.norm(np.tensordot(C[r][b], y, axes=(1,0)), axis=0)**2
+    return J
+
+
 # Calculate LS error J as function of B0
-def getB0Residuals(Y, C, nB0, iR2cand, D=None, scale=1):
-    J = np.zeros(shape=(nB0, Y.shape[1], Y.shape[2], Y.shape[3], len(iR2cand)))
+def get_B0_residuals(Y, C, nB0, iR2cand, D=None, scale=1):
+    num_voxels = Y.shape[1]
+    J = np.zeros(shape=(nB0, num_voxels, len(iR2cand)))
+    if not D: # complex-valued estimates
+        y = Y
     for r in range(len(iR2cand)):
         for b in range(nB0):
-            if not D:  # complex-valued estimates
-                y = Y
-            else:  # real-valued estimates
-                y, phi = getRealDemodulated(Y, D[r][b])
-            J[b, :, :, :, r] = np.linalg.norm(np.tensordot(C[iR2cand[r]][b], y*scale, axes=(1,0)), axis=0)**2
-    J = np.min(J, axis=4) # minimum over R2* candidates
+            if D:  # real-valued estimates
+                y = getRealDemodulated(Y, D[r][b])[0]
+            J[b, :, r] = np.linalg.norm(np.tensordot(C[iR2cand[r]][b], y*scale, axes=(1,0)), axis=0)**2
+    J = np.min(J, axis=-1) # minimum over R2* candidates
     return J
 
 
@@ -331,7 +317,8 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     determineB0 = aPar.graphcutLevel is not None or aPar.nICMiter > 0
     determineR2 = (aPar.nR2 > 1) and (R2map is None)
 
-    Y = dPar.data
+    Y = dPar.data.reshape(dPar.N, -1)
+    shape = dPar.data.shape[1:]
 
     # Prepare matrices
     # Off-resonance modulation vectors (one for each off-resonance value)
@@ -372,9 +359,9 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        level = {'L': 0, 'shape': Y.shape[1:], 'block': (1,1,1), 'voxelsize': dPar.voxelsize}
+        level = {'L': 0, 'shape': shape, 'block': (1,)*len(dPar.voxelsize), 'voxelsize': dPar.voxelsize}
         scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
-        J = getB0Residuals(Y, C, aPar.nB0, aPar.iR2cand, D, scale)
+        J = get_B0_residuals(Y.reshape(dPar.N, -1), C, aPar.nB0, aPar.iR2cand, D, scale)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
             offresPenalty *= getMeanEnergy(Y * scale)
@@ -384,23 +371,23 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
                                 aPar.nICMiter, J, V, aPar.mu,
                                 offresPenalty, int(dPar.offresCenter/B0step))
     elif B0map is None:
-        dB0 = np.zeros(Y.shape[1:], dtype=int)
+        dB0 = np.zeros(np.prod(shape), dtype=int)
     else:
-        dB0 = np.array(B0map/B0step, dtype=int)
+        dB0 = np.array(B0map.flatten()/B0step, dtype=int)
 
     if determineR2:
-        J = getR2Residuals(Y, dB0, C, aPar.nB0, aPar.nR2, D)
+        J = get_R2_residuals(Y, dB0, C, aPar.nB0, aPar.nR2, D)
         R2 = np.argmin(J, axis=0) # brute force minimization
     elif R2map is None:
-        R2 = np.zeros(Y.shape[1:], dtype=int)
+        R2 = np.zeros(np.prod(shape), dtype=int)
     else:
-        R2 = np.array(R2map/aPar.R2step, dtype=int)
+        R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
 
     # Find least squares solution given dB0 and R2
-    rho = np.zeros(shape=(mPar.M, *Y.shape[1:]), dtype=complex)
+    rho = np.zeros(shape=(mPar.M, np.prod(shape)), dtype=complex)
     for r in range(aPar.nR2):
         for b in range(aPar.nB0):
-            vxls = (dB0 == b)*(R2 == r)
+            vxls = (dB0 == b) * (R2 == r)
             if not D:  # complex estimates
                 y = Y[:, vxls]
             else:  # real-valued estimates
@@ -411,15 +398,8 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
                 phi[rho[0, vxls] < 0] += np.pi
                 rho[:, vxls] *= np.exp(1j*phi)
 
-    if B0map is None:
-        B0map = np.zeros(Y.shape[1:])
-    if R2map is None:
-        R2map = np.empty(Y.shape[1:])
-
-    if determineR2:
-        R2map[:] = R2*aPar.R2step
-
-    if determineB0:
-        B0map[:] = dB0*B0step
+    rho = rho.reshape(mPar.M, *shape)
+    B0map = dB0.reshape(shape) * B0step
+    R2map = R2.reshape(shape) * aPar.R2step
 
     return rho, B0map, R2map
