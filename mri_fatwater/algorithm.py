@@ -1,6 +1,8 @@
 import thinqpbo as tq
 import numpy as np
 from skimage.filters import threshold_otsu
+from dataclasses import replace
+from itertools import product
 from .constants import GYRO
 
 
@@ -89,77 +91,66 @@ def findTwoSmallestMinima(J):
     return A, B
 
 
-# 2D measure of isotropy defined as
-# the square area over the square perimeter (area normalized to 1)
-def isotropy2D(dx, dy): return np.sqrt(dx*dy)/(2*(dx+dy))
+def isotropy(voxelsize):
+    volume = np.prod(voxelsize) # hypervolume
+    surface = 2 * volume * np.sum(1 / np.array(voxelsize)) # hypersurface
+    norm = volume ** (1/len(voxelsize)) # normalize by hypercube sidelength
+    return volume / surface / norm
 
 
-# 3D measure of isotropy defined as
-# the cube volume over the cube area (volume normalized to 1)
-def isotropy3D(dx, dy, dz): return (dx*dy*dz)**(2/3)/(2*(dx*dy+dx*dz+dy*dz))
+def get_downsampling(shape, voxelsize):
+    best_isotropy = 0 # find downsamling which maximizes isotropy
+    dims = np.where(np.array(shape)>1)[0] # dims permitting downsampling
+    for factors in product([1, 2], repeat=len(dims)):
+        if np.prod(factors)==1:
+            continue
+        new_voxelsize = np.array(voxelsize)[dims] * factors
+        iso = isotropy(new_voxelsize)
+        if iso > best_isotropy:
+            best_isotropy = iso
+            best_factors = factors
+    factors = tuple(best_factors[dim] if dim in dims else 1 for dim in range(len(shape)))
+    coarse_voxelsize = tuple(sz * f for sz, f in zip(voxelsize, factors))
+    coarse_shape = tuple(int(np.ceil(n/f)) for n, f in zip(shape, factors))
+    return coarse_shape, coarse_voxelsize
 
 
-def getHigherLevel(level):
-    high = {'L': level['L'] + 1}
-    # Isotropy promoting downsampling
-    maxIsotropy = 0
-    for sx in [1, 2]:
-        for sy in [1, 2]:
-            for sz in [1, 2]:  # Loop over all 2^3=8 downscaling combinations
-                # at least one dimension must change and the size of all
-                # dimensions at lower level must permit any downscaling
-                if (sx*sy*sz > 1 and level['shape'][0] >= sx and
-                   level['shape'][1] >= sy and level['shape'][2] >= sz):
-                    if (level['shape'][0] == 1):
-                        iso = isotropy2D(level['voxelsize'][1]*sy, level['voxelsize'][2]*sz)
-                    elif (level['shape'][1] == 1):
-                        iso = isotropy2D(level['voxelsize'][0]*sx, level['voxelsize'][2]*sz)
-                    elif (level['shape'][2] == 1):
-                        iso = isotropy2D(level['voxelsize'][0]*sx, level['voxelsize'][1]*sy)
-                    else:
-                        iso = isotropy3D(
-                          level['voxelsize'][0]*sx, level['voxelsize'][1]*sy, level['voxelsize'][2]*sz)
-                    if iso > maxIsotropy:
-                        maxIsotropy = iso
-                        high['block'] = (sx, sy, sz)
-    high['voxelsize'] = tuple(vs * s for vs, s in zip(level['voxelsize'], high['block']))
-    high['shape'] = tuple(int(np.ceil(n/s)) for n, s in zip(level['shape'], high['block']))
-    return high
+def downsample_residual(J, coarse_shape, fine_shape):
+    nB0 = J.shape[0]
+    factors = tuple(int(np.ceil(fine/coarse)) for fine, coarse in zip(fine_shape, coarse_shape))
+    padding = tuple(fine % upsampling_factor for fine, upsampling_factor in zip(fine_shape, factors))
+    J_coarse = np.pad(J.reshape(nB0, *fine_shape), 
+                      tuple((0, p) for p in (0,) + padding))
+    new_shape = (nB0,) + tuple(s for pair in zip(coarse_shape, factors) for s in pair)
+    mean_axes = tuple(2 * (np.arange(len(coarse_shape)) + 1))
+    J_coarse = J_coarse.reshape(new_shape).mean(axis=mean_axes)
+    return J_coarse.reshape(nB0, -1)
 
 
-def getHighLevelResidualImage(J, high, level):
-    J = J.reshape(J.shape[0], *level['shape'])
-    Jhigh = np.zeros((J.shape[0], level['shape'][0] + level['shape'][0] % high['block'][0],
-                                  level['shape'][1] + level['shape'][1] % high['block'][1],
-                                  level['shape'][2] + level['shape'][2] % high['block'][2]))
-    Jhigh[:, :level['shape'][0], :level['shape'][1], :level['shape'][2]] = J
-    Jhigh = Jhigh.reshape((J.shape[0], high['shape'][0], high['block'][0], high['shape'][1], high['block'][1], high['shape'][2], high['block'][2])).mean(axis=(2,4,6))
-    return Jhigh.reshape(Jhigh.shape[0], -1)
+def upsample_B0(dB0, coarse_shape, fine_shape):
+    upsampled = dB0.reshape(coarse_shape)
+    for dim in range(len(coarse_shape)):
+        factor = int(np.ceil(fine_shape[dim]/coarse_shape[dim]))
+        upsampled = np.repeat(upsampled, factor, axis=dim)
+    return upsampled[tuple(slice(0, s) for s in fine_shape)].flatten()
 
 
-def getB0fromHighLevel(dB0high, level, high):
-    return np.repeat(np.repeat(np.repeat(dB0high.reshape(high['shape']), high['block'][2], axis=2), high['block'][1], axis=1), high['block'][0], axis=0)[:level['shape'][0], :level['shape'][1], :level['shape'][2]].flatten()
-
-
-def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
-                      nICMiter, J, V, mu, offresPenalty=0, offresCenter=0):
+def calculate_fieldmap(J, V, aPar, shape, voxelsize, offresPenalty=0, offresCenter=0):
     A, B = findTwoSmallestMinima(J)
     dB0 = np.array(A)
 
     # Multiscale recursion
     if dB0.size == 1:  # Trivial case at coarsest level with only one voxel
-        print(f'Level {level['shape']}: Trivial case')
+        print(f'Level {shape}: Trivial case')
         return dB0
 
-    if multiScale:
-        high = getHigherLevel(level)
-        Jhigh = getHighLevelResidualImage(J, high, level)
+    if aPar.multiScale:
+        coarse_shape, coarse_voxelsize = get_downsampling(shape, voxelsize)
+        J_coarse = downsample_residual(J, coarse_shape, shape)
         # Recursion:
-        dB0high = calculateFieldMap(nB0, high, graphcutLevel, multiScale,
-                                    maxICMupdate, nICMiter, Jhigh, V, mu,
-                                    offresPenalty, offresCenter)
-        dB0 = getB0fromHighLevel(dB0high, level, high)
-        print(f'Level {level['shape']}: ')
+        dB0_coarse = calculate_fieldmap(J_coarse, V, replace(aPar, graphcutLevel=aPar.graphcutLevel-1), coarse_shape, coarse_voxelsize, offresPenalty, offresCenter)
+        dB0 = upsample_B0(dB0_coarse, coarse_shape, shape)
+        print(f'Level {shape}: ')
 
     # Prepare MRF
     print('Preparing MRF...', end='')
@@ -170,31 +161,31 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
         [ 0,  0,  1]
     ])
 
-    cyclic = [False] * len(level['shape'])
+    cyclic = [False] * len(shape)
 
-    ngb_indices, edge_ngb = get_neighbour_indices(neighbourhood, level['shape'], cyclic)
+    ngb_indices, edge_ngb = get_neighbour_indices(neighbourhood, shape, cyclic)
     num_ngb = ngb_indices.shape[0]
     
     # 2nd derivative of residual function
     # NOTE: No division by square(steplength) since
     # square(steplength) not included in V
-    vxls = range(np.prod(level['shape']))
-    ddJ = (J[(A+1) % nB0, vxls] + J[(A-1) % nB0, vxls] - 2 * J[A, vxls])
+    vxls = range(np.prod(shape))
+    ddJ = (J[(A+1) % aPar.nB0, vxls] + J[(A-1) % aPar.nB0, vxls] - 2 * J[A, vxls])
 
     w = np.zeros((ngb_indices.shape))
     for k, ngb in enumerate(neighbourhood):
-        distance = np.linalg.norm(ngb * level['voxelsize'])
+        distance = np.linalg.norm(ngb * voxelsize)
         ddJq = ddJ[ngb_indices[k]]
-        w[k] = np.minimum(ddJ, ddJq) * mu / distance
+        w[k] = np.minimum(ddJ, ddJq) * aPar.mu / distance
         w[k][edge_ngb[k]] = 0
     
     # Prepare data fidelity costs
-    OP = (1-np.cos(2*np.pi*(np.arange(nB0)-offresCenter)/nB0)) / 2 * offresPenalty
+    OP = (1-np.cos(2*np.pi*(np.arange(aPar.nB0)-offresCenter)/aPar.nB0)) / 2 * offresPenalty
     D = np.array([J[A, vxls] + OP[A], J[B, vxls] + OP[B]])
     print('DONE')
 
     # QPBO
-    graphcut = level['L'] >= graphcutLevel
+    graphcut = aPar.graphcutLevel <= 0
     if graphcut:
         Vs = np.zeros((4, *ngb_indices.shape), dtype=float)
         for q in range(num_ngb):
@@ -212,9 +203,9 @@ def calculateFieldMap(nB0, level, graphcutLevel, multiScale, maxICMupdate,
         dB0[label == 1] = B[label == 1]
 
     # ICM
-    if nICMiter > 0:
+    if aPar.nICMiter > 0:
         print('Solving MRF using ICM...', end='')
-        dB0 = ICM(dB0, nB0, maxICMupdate, nICMiter, J, V, w, ngb_indices)
+        dB0 = ICM(dB0, aPar.nB0, aPar.maxICMupdate, aPar.nICMiter, J, V, w, ngb_indices)
         print('DONE')
     return dB0
 
@@ -359,17 +350,13 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        level = {'L': 0, 'shape': shape, 'block': (1,)*len(dPar.voxelsize), 'voxelsize': dPar.voxelsize}
         scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
         J = get_B0_residuals(Y.reshape(dPar.N, -1), C, aPar.nB0, aPar.iR2cand, D, scale)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
             offresPenalty *= getMeanEnergy(Y * scale)
 
-        dB0 = calculateFieldMap(aPar.nB0, level, aPar.graphcutLevel,
-                                aPar.multiScale, aPar.maxICMupdate,
-                                aPar.nICMiter, J, V, aPar.mu,
-                                offresPenalty, int(dPar.offresCenter/B0step))
+        dB0 = calculate_fieldmap(J, V, aPar, shape, dPar.voxelsize, offresPenalty, int(dPar.offresCenter/B0step))
     elif B0map is None:
         dB0 = np.zeros(np.prod(shape), dtype=int)
     else:
