@@ -8,6 +8,7 @@ graphcut: True                  # B0-correction based on graph cuts
 multiScale: True                # multi-scale B0-correction
 graphcutLevel: 0                # lowest scale level to perform graph cut
 nICMiter: 10                    # iterations for B0 fine-tuning using ICM
+neighbourhoodRadius: 0.         # [mm] radius for MRF neighborhood (nearest neighbour in each dim is always included)
 use3D: True                     # B0-correction in 3D
 magnitudeDiscrimination: False  # fat fraction calculation free from magnitude bias
 autocrop: True                  # auto-crop low-signal regions

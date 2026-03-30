@@ -135,6 +135,17 @@ def upsample_B0(dB0, coarse_shape, fine_shape):
     return upsampled[tuple(slice(0, s) for s in fine_shape)].flatten()
 
 
+def get_neighbourhood(radius, voxelsize):
+    bound = np.floor(radius / np.array(voxelsize)).astype(int)
+    candidates = product(*(range(-b, b + 1) for b in bound))
+    neighbours = [ngb for ngb in candidates
+                  if ngb > (0,) * len(voxelsize) # filter out duplicates in opposite directions and origin
+                  and np.linalg.norm(np.array(ngb) * voxelsize) <= radius]
+    # make sure immediate neighbours are always included:
+    neighbours.extend([immediate for immediate in np.eye(len(voxelsize), dtype=int) if tuple(immediate) not in neighbours])
+    return np.array(neighbours)
+
+
 def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, offresCenter=0):
     A, B = findTwoSmallestMinima(J)
     dB0 = np.array(A)
@@ -155,12 +166,7 @@ def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, of
     # Prepare MRF
     print('Preparing MRF...', end='')
     # Prepare discontinuity costs
-    neighbourhood = np.array([
-        [ 1,  0,  0],
-        [ 0,  1,  0],
-        [ 0,  0,  1]
-    ])
-
+    neighbourhood = get_neighbourhood(aPar.neighbourhoodRadius, voxelsize)
     ngb_indices, edge_ngb = get_neighbour_indices(neighbourhood, shape, cyclic)
     num_ngb = ngb_indices.shape[0]
     

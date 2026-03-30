@@ -148,6 +148,7 @@ class AlgoParams:
     multiScale: bool = True
     graphcutLevel: int = 0
     nICMiter: int = 10
+    neighbourhoodRadius: float = 0. # [mm]
     use3D: bool = True
     magnitudeDiscrimination: bool = False
     autocrop: bool = True
