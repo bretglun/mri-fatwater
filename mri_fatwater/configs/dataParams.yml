@@ -3,6 +3,7 @@ echo_dim: 0                    # data dimension with echoes
 t: [0.00287, 0.00607, 0.00927] # [sec]
 B0: 1.494                      # [T]
 voxelsize: [1.5, 1.5, 5.0]     # [mm]
+cyclic: [False, False, False]  # which dimensions are cyclic?
 crop: [64, 64, 0, 92, 92, 4]   # crop region to separate [x0, y0, z0, x1, y1, z1]
 pad: True                      # pad back after separation
 temperature: 37                # [°C]

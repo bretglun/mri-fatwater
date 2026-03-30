@@ -135,7 +135,7 @@ def upsample_B0(dB0, coarse_shape, fine_shape):
     return upsampled[tuple(slice(0, s) for s in fine_shape)].flatten()
 
 
-def calculate_fieldmap(J, V, aPar, shape, voxelsize, offresPenalty=0, offresCenter=0):
+def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, offresCenter=0):
     A, B = findTwoSmallestMinima(J)
     dB0 = np.array(A)
 
@@ -148,7 +148,7 @@ def calculate_fieldmap(J, V, aPar, shape, voxelsize, offresPenalty=0, offresCent
         coarse_shape, coarse_voxelsize = get_downsampling(shape, voxelsize)
         J_coarse = downsample_residual(J, coarse_shape, shape)
         # Recursion:
-        dB0_coarse = calculate_fieldmap(J_coarse, V, replace(aPar, graphcutLevel=aPar.graphcutLevel-1), coarse_shape, coarse_voxelsize, offresPenalty, offresCenter)
+        dB0_coarse = calculate_fieldmap(J_coarse, V, replace(aPar, graphcutLevel=aPar.graphcutLevel-1), coarse_shape, coarse_voxelsize, cyclic, offresPenalty, offresCenter)
         dB0 = upsample_B0(dB0_coarse, coarse_shape, shape)
         print(f'Level {shape}: ')
 
@@ -160,8 +160,6 @@ def calculate_fieldmap(J, V, aPar, shape, voxelsize, offresPenalty=0, offresCent
         [ 0,  1,  0],
         [ 0,  0,  1]
     ])
-
-    cyclic = [False] * len(shape)
 
     ngb_indices, edge_ngb = get_neighbour_indices(neighbourhood, shape, cyclic)
     num_ngb = ngb_indices.shape[0]
@@ -356,7 +354,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         if aPar.offresPenalty > 0:
             offresPenalty *= getMeanEnergy(Y * scale)
 
-        dB0 = calculate_fieldmap(J, V, aPar, shape, dPar.voxelsize, offresPenalty, int(dPar.offresCenter/B0step))
+        dB0 = calculate_fieldmap(J, V, aPar, shape, dPar.voxelsize, dPar.cyclic, offresPenalty, int(dPar.offresCenter/B0step))
     elif B0map is None:
         dB0 = np.zeros(np.prod(shape), dtype=int)
     else:
