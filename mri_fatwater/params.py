@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, fields
 from mri_fatwater import io
 import numpy as np
-from typing import Optional
+from typing import Optional, ClassVar
 from pathlib import Path
 
 
@@ -137,18 +137,12 @@ class ModelParams:
 
 
 @dataclass
-class AlgoParams:
+class BaseAlgoParams:
+    ALGORITHM_NAME: ClassVar[str] = 'pass'
     nR2: int = 145
     R2max: float = 144. # [sec-1]
     R2cand: tuple[float, ...] = (40.,) # [sec-1]
     nB0: int = 100
-    mu: float = 0.1
-    offresPenalty: float = 0.
-    graphcut: bool = True
-    multiScale: bool = True
-    graphcutLevel: int = 0
-    nICMiter: int = 10
-    neighbourhoodRadius: float = 0. # [mm]
     use3D: bool = True
     magnitudeDiscrimination: bool = False
     autocrop: bool = True
@@ -168,7 +162,50 @@ class AlgoParams:
                 self.output.append('phi')
             if (self.nR2 > 1):
                 self.output.append('R2map')
+    
+    @property
+    def algorithm(self):
+        return self.ALGORITHM_NAME
 
+
+@dataclass
+class MRFparams(BaseAlgoParams):
+    ALGORITHM_NAME: ClassVar[str] = 'ICM'
+    mu: float = 0.1
+    offresPenalty: float = 0.
+    neighbourhoodRadius: float = 0. # [mm]
+    nICMiter: int = 10
+    
+    def __init__(self, **overrides):
+        super().__init__(**overrides)
+
+
+@dataclass
+class QPBOparams(MRFparams):
+    ALGORITHM_NAME: ClassVar[str] = 'QPBO'
+    multiScale: bool = True
+    graphcutLevel: int = 0
+
+    def __init__(self, **overrides):
+        super().__init__(**overrides)
+
+
+ALGORITHM_CLASSES = [BaseAlgoParams, MRFparams, QPBOparams]
+
+
+def AlgoParams(algorithm, instance=None, realEstimates=False, **overrides):
+    algorithm_classes = {cls.ALGORITHM_NAME: cls for cls in ALGORITHM_CLASSES}
+    if algorithm not in algorithm_classes:
+        raise ValueError(f'Unknown algorithm "{algorithm}". Supported algorithms are {list(algorithm_classes.keys())}.')
+    cls = algorithm_classes[algorithm]
+    
+    if instance is None:
+        kwargs = {}
+    else:
+        kwargs = {f.name: getattr(instance, f.name) for f in fields(cls) if hasattr(instance, f.name)}
+    kwargs.update(overrides)
+    return cls(realEstimates=realEstimates, **kwargs)
+    
 
 def prepare_data_params(data, data_params, data_param_file):
     params = get_params(data_param_file, data_params)

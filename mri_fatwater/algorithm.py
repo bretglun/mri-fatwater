@@ -309,8 +309,6 @@ def getMeanEnergy(Y):
 
 # Perform the actual reconstruction
 def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
-    determineB0 = aPar.graphcutLevel is not None or aPar.nICMiter > 0
-    determineR2 = (aPar.nR2 > 1) and (R2map is None)
 
     Y = dPar.data.reshape(dPar.N, -1)
     shape = dPar.data.shape[1:]
@@ -348,7 +346,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
 
     # For B0 index -> off-resonance in ppm
     B0step = 1.0/aPar.nB0/np.abs(dPar.dt)/GYRO/dPar.B0
-    if determineB0:
+    if aPar.algorithm != 'pass':
         V = []  # Precalculate discontinuity costs
         for b in range(aPar.nB0):
             V.append(min(b**2, (b-aPar.nB0)**2))
@@ -366,13 +364,13 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     else:
         dB0 = np.array(B0map.flatten()/B0step, dtype=int)
 
-    if determineR2:
+    if R2map is not None:
+        R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
+    elif (aPar.nR2 > 1):
         J = get_R2_residuals(Y, dB0, C, aPar.nB0, aPar.nR2, D)
         R2 = np.argmin(J, axis=0) # brute force minimization
-    elif R2map is None:
-        R2 = np.zeros(np.prod(shape), dtype=int)
     else:
-        R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
+        R2 = np.zeros(np.prod(shape), dtype=int)
 
     # Find least squares solution given dB0 and R2
     rho = np.zeros(shape=(mPar.M, np.prod(shape)), dtype=complex)

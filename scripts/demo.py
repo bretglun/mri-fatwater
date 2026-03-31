@@ -32,7 +32,8 @@ def demo_with_param_dicts(data_path):
         data=data,
         data_params={'B0': 1.5, 't': [0.00287, 0.00607, 0.00927]}, 
         algo_params={
-            'graphcut': True, 
+            'algorithm': 'QPBO',
+            'nICMiter': 0,
             'output': ['wat', 'fat', 'ff', 'B0map', 'R2map']}, 
         model_params={
             'watCS': 4.7, 

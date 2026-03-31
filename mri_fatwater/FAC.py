@@ -2,7 +2,7 @@
 # See Berglund et al. 2012 “Model-Based Mapping of Fat Unsaturation and Chain Length by Chemical Shift Imaging—Phantom Validation and in Vivo Feasibility.” MRM 68(6):1815–27.
 import numpy as np
 from dataclasses import dataclass, replace
-from mri_fatwater import fatwater
+from mri_fatwater import fatwater, params
 from mri_fatwater.params import ModelParams
 from .constants import EPSILON
 
@@ -54,7 +54,7 @@ def run_FAC_passes(dPar, aPar, mPar):
     if (mPar.nFAC > 2):
         output.append('CL')
     mPar1 = replace(mPar, nFAC=0, relAmps=None)
-    aPar2 = replace(aPar, nICMiter=0, graphcut=False, graphcutLevel=None, output=output)
+    aPar2 = params.AlgoParams(algorithm='pass', instance=aPar, output=output)
     passes = [
         (dPar, aPar, mPar1), # First pass: use standard fat-water separation to determine B0 and R2*
         (dPar, aPar2, mPar)  # Second pass: use B0- and R2*-maps from first pass and do the Fatty Acid Composition
