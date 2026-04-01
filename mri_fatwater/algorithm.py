@@ -233,14 +233,15 @@ def getRealDemodulated(Y, D):
 
 # Calculate LS error J as function of R2*
 def get_R2_residuals(Y, dB0, C, nB0, nR2, D=None):
+    dB0_wrapped = dB0 % nB0
     J = np.zeros(shape=(nR2, *Y.shape[1:]))
     for b in range(nB0):
         for r in range(nR2):
             if not D:  # complex-valued estimates
-                y = Y[:, dB0 == b]
+                y = Y[:, dB0_wrapped == b]
             else:  # real-valued estimates
-                y = getRealDemodulated(Y[:, dB0 == b], D[r][b])[0]
-            J[r, dB0 == b] = np.linalg.norm(np.tensordot(C[r][b], y, axes=(1,0)), axis=0)**2
+                y = getRealDemodulated(Y[:, dB0_wrapped == b], D[r][b])[0]
+            J[r, dB0_wrapped == b] = np.linalg.norm(np.tensordot(C[r][b], y, axes=(1,0)), axis=0)**2
     return J
 
 
@@ -376,7 +377,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     rho = np.zeros(shape=(mPar.M, np.prod(shape)), dtype=complex)
     for r in range(aPar.nR2):
         for b in range(aPar.nB0):
-            vxls = (dB0 == b) * (R2 == r)
+            vxls = ((dB0 % aPar.nB0) == b) * (R2 == r)
             if not D:  # complex estimates
                 y = Y[:, vxls]
             else:  # real-valued estimates
