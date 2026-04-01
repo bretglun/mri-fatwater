@@ -74,21 +74,21 @@ def ICM(prev, L, max_update, num_iters, J, V, w, ngb_indices):
     return current
 
 
-# Find all local minima of discretely evaluated function f(t) with period T
-def findMinima(f): return np.where((f < np.roll(f, 1))*(f < np.roll(f, -1)))[0]
-
-
-# In each voxel, find two smallest local residual minima in a period of omega
-def findTwoSmallestMinima(J):
-    A = np.zeros(J.shape[1], dtype=int)
-    B = np.zeros(J.shape[1], dtype=int)
-    for q in range(J.shape[1]):
-        minima = sorted(findMinima(J[:, q]), key=lambda b: J[b, q])
-        if len(minima) >= 2:
-            A[q], B[q] = minima[:2]
-        elif len(minima) == 1:
-            A[q] = B[q] = minima[0]
-    return A, B
+def find_minima(J, num_minima=1):
+    if J.ndim > 2:
+        return find_minima(J.reshape(J.shape[0], -1), num_minima=num_minima).reshape((num_minima, *J.shape[1:]))
+    minima, voxels = np.where((J < np.roll(J, 1, axis=0)) & (J < np.roll(J, -1, axis=0)))
+    sorting = np.lexsort((J[minima, voxels], voxels))
+    minima_sorted = minima[sorting]
+    voxels_sorted = voxels[sorting]
+    unique_voxels, unique_indices, counts = np.unique(voxels_sorted, return_index=True, return_counts=True)
+    if len(unique_voxels) != J.shape[1]:
+        raise ValueError(f'Not all voxels have a local minimum. Found minima for {len(unique_voxels)} out of {J.shape[1]} voxels.')
+    # Fill resulting array with smallest minimum and then record larger minima if available:
+    minima_array = np.tile(minima_sorted[unique_indices], (num_minima, 1)) # shape (num_minima, num_voxels)
+    for k in range(1, num_minima):
+        minima_array[k, unique_voxels[counts > k]] = minima_sorted[unique_indices[counts > k] + k]
+    return minima_array
 
 
 def isotropy(voxelsize):
@@ -147,7 +147,7 @@ def get_neighbourhood(radius, voxelsize):
 
 
 def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, offresCenter=0):
-    A, B = findTwoSmallestMinima(J)
+    A, B = find_minima(J, num_minima=2)
     dB0 = np.array(A)
 
     # Multiscale recursion
