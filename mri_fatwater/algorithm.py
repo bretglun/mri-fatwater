@@ -213,47 +213,24 @@ def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, of
     return dB0
 
 
-# Calculate initial phase phi according to
-# Bydder et al. MRI 29 (2011): 216-221.
-def getPhi(Y, D):
-    phi = np.zeros((Y.shape[1]))
-    for i in range(Y.shape[1]):
-        y = Y[:, i]
-        phi[i] = .5*np.angle(np.dot(np.dot(y.transpose(), D), y))
-    return phi
-
-
-# Calculate phi, remove it from Y and return separate real and imag parts
-def getRealDemodulated(Y, D):
-    phi = getPhi(Y, D)
-    y = Y/np.exp(1j*phi)
-    return np.concatenate((np.real(y), np.imag(y))), phi
-
-
 # Calculate LS error J as function of R2*
-def get_R2_residuals(Y, dB0, C, nB0, nR2, D=None):
+def get_R2_residuals(Y, dB0, C, nB0, nR2):
     dB0_wrapped = dB0 % nB0
     J = np.zeros(shape=(nR2, *Y.shape[1:]))
     for b in range(nB0):
         for r in range(nR2):
-            if not D:  # complex-valued estimates
-                y = Y[:, dB0_wrapped == b]
-            else:  # real-valued estimates
-                y = getRealDemodulated(Y[:, dB0_wrapped == b], D[r][b])[0]
+            y = Y[:, dB0_wrapped == b]
             J[r, dB0_wrapped == b] = np.linalg.norm(np.tensordot(C[r][b], y, axes=(1,0)), axis=0)**2
     return J
 
 
 # Calculate LS error J as function of B0
-def get_B0_residuals(Y, C, nB0, iR2cand, D=None, scale=1):
+def get_B0_residuals(Y, C, nB0, iR2cand, scale=1):
     num_voxels = Y.shape[1]
     J = np.zeros(shape=(nB0, num_voxels, len(iR2cand)))
-    if not D: # complex-valued estimates
-        y = Y
+    y = Y
     for r in range(len(iR2cand)):
         for b in range(nB0):
-            if D:  # real-valued estimates
-                y = getRealDemodulated(Y, D[r][b])[0]
             J[b, :, r] = np.linalg.norm(np.tensordot(C[iR2cand[r]][b], y*scale, axes=(1,0)), axis=0)**2
     J = np.min(J, axis=-1) # minimum over R2* candidates
     return J
@@ -281,22 +258,6 @@ def modelMatrix(dPar, mPar, R2):
     return RA
 
 
-# Get matrix Dtmp defined so that D = Bconj*Dtmp*Bh
-# Following Bydder et al. MRI 29 (2011): 216-221.
-def getDtmp(A):
-    Ah = A.conj().T
-    inv = np.linalg.inv(np.real(np.dot(Ah, A)))
-    Dtmp = np.dot(A.conj(), np.dot(inv, Ah))
-    return Dtmp
-
-
-# Separate and concatenate real and imag parts of complex matrix M
-def realify(M):
-    re = np.real(M)
-    im = np.imag(M)
-    return np.concatenate((np.concatenate((re, im)), np.concatenate((-im, re))), 1)
-
-
 # Get mean square signal magnitude within foreground
 def getMeanEnergy(Y):
     energy = np.linalg.norm(Y, axis=0)**2
@@ -307,6 +268,9 @@ def getMeanEnergy(Y):
 # Perform the actual reconstruction
 def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
 
+    if mPar.realEstimates:
+        raise NotImplementedError('Real-valued estimates not yet implemented.')
+
     Y = dPar.data.reshape(dPar.N, -1)
     shape = dPar.data.shape[1:]
 
@@ -315,29 +279,17 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     B = modulation_vectors(aPar.nB0, dPar.N)
     Bh = B.conj()
     RA, RAp, C, Qp = [], [], [], []
-    D = None
-    if mPar.realEstimates:
-        D = []  # Matrix for calculating phi (needed for real-valued estimates)
+    
     for r in range(aPar.nR2):
         R2 = r*aPar.R2step
         RA.append(modelMatrix(dPar, mPar, R2))
-        if mPar.realEstimates:
-            D.append([])
-            Dtmp = getDtmp(RA[r])
-            for b in range(aPar.nB0):
-                D[r].append(np.dot(B[b,:,:].conj(), np.dot(Dtmp, Bh[b,:,:])))
-            RA[r] = np.concatenate((np.real(RA[r]), np.imag(RA[r])))
         RAp.append(np.linalg.pinv(RA[r]))
 
-    if mPar.realEstimates:
-        for b in range(aPar.nB0):
-            B[b,:,:] = realify(B[b,:,:])
-            Bh[b,:,:] = realify(Bh[b,:,:])
     for r in range(aPar.nR2):
         C.append([])
         Qp.append([])
         # Null space projection matrix
-        proj = np.eye(dPar.N*(1+mPar.realEstimates))-np.dot(RA[r], RAp[r])
+        proj = np.eye(dPar.N)-np.dot(RA[r], RAp[r])
         for b in range(aPar.nB0):
             C[r].append(np.dot(np.dot(B[b], proj), Bh[b,:,:]))
             Qp[r].append(np.dot(RAp[r], Bh[b,:,:]))
@@ -351,7 +303,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         V = np.array(V)
 
         scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
-        J = get_B0_residuals(Y.reshape(dPar.N, -1), C, aPar.nB0, aPar.iR2cand, D, scale)
+        J = get_B0_residuals(Y.reshape(dPar.N, -1), C, aPar.nB0, aPar.iR2cand, scale)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
             offresPenalty *= getMeanEnergy(Y * scale)
@@ -365,7 +317,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     if R2map is not None:
         R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
     elif (aPar.nR2 > 1):
-        J = get_R2_residuals(Y, dB0, C, aPar.nB0, aPar.nR2, D)
+        J = get_R2_residuals(Y, dB0, C, aPar.nB0, aPar.nR2)
         R2 = np.argmin(J, axis=0) # brute force minimization
     else:
         R2 = np.zeros(np.prod(shape), dtype=int)
@@ -375,15 +327,8 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     for r in range(aPar.nR2):
         for b in range(aPar.nB0):
             vxls = ((dB0 % aPar.nB0) == b) * (R2 == r)
-            if not D:  # complex estimates
-                y = Y[:, vxls]
-            else:  # real-valued estimates
-                y, phi = getRealDemodulated(Y[:, vxls], D[r][b])
+            y = Y[:, vxls]
             rho[:, vxls] = np.dot(Qp[r][b], y)
-            if D:
-                #  Assert phi is the phase angle of water
-                phi[rho[0, vxls] < 0] += np.pi
-                rho[:, vxls] *= np.exp(1j*phi)
 
     rho = rho.reshape(mPar.M, *shape)
     B0map = dB0.reshape(shape) * B0step
