@@ -220,27 +220,15 @@ def getMeanEnergy(Y):
     return np.mean(energy[energy >= thres])
 
 
-# Calculate LS error J as function of R2*
-def get_R2_residuals(Y, dB0, null_proj, nB0, nR2):
-    dB0_wrapped = dB0 % nB0
-    J = np.zeros(shape=(nR2, *Y.shape[1:]))
-    for b in range(nB0):
-        for r in range(nR2):
-            y = Y[:, dB0_wrapped == b]
-            J[r, dB0_wrapped == b] = np.linalg.norm(np.tensordot(null_proj[r][b], y, axes=(1,0)), axis=0)**2
-    return J
+# Calculate LS error as function of R2*, shape: (nR2, num_voxels)
+def R2_residuals(Y, dB0, null_proj, nB0):
+    return np.sum(np.abs(np.einsum('rvnm,mv->rvn', null_proj[:, dB0 % nB0], Y))**2, axis=2)
 
 
-# Calculate LS error J as function of B0
-def get_B0_residuals(Y, null_proj, nB0, iR2cand, scale=1):
-    num_voxels = Y.shape[1]
-    J = np.zeros(shape=(nB0, num_voxels, len(iR2cand)))
-    y = Y
-    for r in range(len(iR2cand)):
-        for b in range(nB0):
-            J[b, :, r] = np.linalg.norm(np.tensordot(null_proj[iR2cand[r]][b], y*scale, axes=(1,0)), axis=0)**2
-    J = np.min(J, axis=-1) # minimum over R2* candidates
-    return J
+# Calculate LS error J as function of B0, shape: (nB0, num_voxels)
+def B0_residuals(Y, null_proj, iR2cand):
+    res = np.sum(np.abs(np.einsum('rbnm,mv->bvnr', null_proj[iR2cand, :], Y))**2, axis=2)
+    return np.min(res, axis=2) # minimize over R2* candidates
 
 
 def modulation_vectors(nB0, N):
@@ -280,8 +268,10 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     if mPar.realEstimates:
         raise NotImplementedError('Real-valued estimates not yet implemented.')
 
-    Y = dPar.data.reshape(dPar.N, -1)
     shape = dPar.data.shape[1:]
+    Y = dPar.data.reshape(dPar.N, -1)
+    scale = np.linalg.norm(Y)**2
+    Y /= scale # To avoid overflow
 
     pinv, null_proj = pseudoinverse_and_projection_matrices(dPar, aPar, mPar)
 
@@ -293,11 +283,10 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
-        J = get_B0_residuals(Y.reshape(dPar.N, -1), null_proj, aPar.nB0, aPar.iR2cand, scale)
+        J = B0_residuals(Y, null_proj, aPar.iR2cand)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
-            offresPenalty *= getMeanEnergy(Y * scale)
+            offresPenalty *= getMeanEnergy(Y)
 
         dB0 = calculate_fieldmap(J, V, aPar, shape, dPar.voxelsize, dPar.cyclic, offresPenalty, int(dPar.offresCenter/B0step))
     elif B0map is None:
@@ -308,15 +297,14 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     if R2map is not None:
         R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
     elif (aPar.nR2 > 1):
-        J = get_R2_residuals(Y, dB0, null_proj, aPar.nB0, aPar.nR2)
-        R2 = np.argmin(J, axis=0) # brute force minimization
+        R2 = np.argmin(R2_residuals(Y, dB0, null_proj, aPar.nB0), axis=0) # brute force minimization
     else:
         R2 = np.zeros(np.prod(shape), dtype=int)
 
     # Find least squares solution given dB0 and R2
-    rho = np.einsum('vmn,nv->mv', pinv[R2, dB0 % aPar.nB0], Y, optimize=True)
+    rho = np.einsum('vmn,nv->mv', pinv[R2, dB0 % aPar.nB0], Y)
 
-    rho = rho.reshape(mPar.M, *shape)
+    rho = rho.reshape(mPar.M, *shape) * scale
     B0map = dB0.reshape(shape) * B0step
     R2map = R2.reshape(shape) * aPar.R2step
 
