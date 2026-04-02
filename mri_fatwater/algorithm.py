@@ -220,28 +220,64 @@ def getMeanEnergy(Y):
     return np.mean(energy[energy >= thres])
 
 
-def estimate_rho(Y, pinv, R2, dB0):
-    return np.einsum('vmn,nv->mv', pinv[R2, dB0], Y)
+def estimate_phi(Y, D, subscripts='nv,vnk,kv->v'):
+    u1Tu2 = np.einsum(subscripts, Y, D, Y)
+    return np.angle(-u1Tu2) / 2 # Berglund et al. 2020, eq. 11
+
+
+def estimate_rho_realvalued(Y, pinv, R2, dB0, D):
+    phi = estimate_phi(Y, D[R2, dB0]) # shape: (num_voxels)
+    Y *= np.exp(-1j * phi) # demodulate phi
+    rho = np.einsum('vmn,nv->mv', pinv[R2, dB0], np.concat((Y, Y.conj()))) # Berglund et al. 2020, eq. 4
+    phi[rho[0] < 0] += np.pi # assert phi is the phase angle of water
+    return rho * np.exp(1j * phi)
+
+
+def estimate_rho(Y, pinv, R2, dB0, D=None):
+    if D is None: # complex-valued estimates
+        return np.einsum('vmn,nv->mv', pinv[R2, dB0], Y)
+    return estimate_rho_realvalued(Y, pinv, R2, dB0, D) # real-valued estimates
 
 
 # Calculate LS error as function of R2*, shape: (nR2, num_voxels)
-def R2_residuals(Y, dB0, null_proj, nB0):
-    return np.sum(np.abs(np.einsum('rvnm,mv->rvn', null_proj[:, dB0 % nB0], Y))**2, axis=2)
+def R2_residuals(Y, dB0, null_proj, nB0, D=None):
+    if D is None: # complex-valued estimates
+        residual_vectors = np.einsum('rvnm,mv->rvn', null_proj[:, dB0 % nB0], Y)
+    else: # real-valued estimates
+        phi = estimate_phi(Y, D[:, dB0], 'nv,rvnk,kv->vr') # shape: (num_voxels, nR2)
+        y = np.einsum('nv,vr->nvr', Y, np.exp(-1j * phi)) # demodulate phi
+        residual_vectors = np.einsum('rvnm,mvr->rvn', null_proj[:, dB0 % nB0], np.concat((y, y.conj()))) # Berglund et al. 2020, eq. 7
+    return np.sum(np.abs(residual_vectors)**2, axis=2)
 
 
 # Calculate LS error J as function of B0, shape: (nB0, num_voxels)
-def B0_residuals(Y, null_proj, iR2cand):
-    res = np.sum(np.abs(np.einsum('rbnm,mv->bvnr', null_proj[iR2cand, :], Y))**2, axis=2)
-    return np.min(res, axis=2) # minimize over R2* candidates
+def B0_residuals(Y, null_proj, iR2cand, D=None):
+    if D is None: # complex-valued estimates
+        residual_vectors = np.einsum('rbnm,mv->bvnr', null_proj[iR2cand, :], Y)
+    else: # real-valued estimates
+        phi = estimate_phi(Y, D[iR2cand], 'nv,rbnk,kv->vrb') # shape: (num_voxels, nR2cand, nB0)
+        y = np.einsum('nv,vrb->nvrb', Y, np.exp(-1j * phi)) # demodulate phi
+        residual_vectors = np.einsum('rbnm,mvrb->bvnr', null_proj[iR2cand, :], np.concat((y, y.conj()))) # Berglund et al. 2020, eq. 7
+    residuals = np.sum(np.abs(residual_vectors)**2, axis=2)
+    return np.min(residuals, axis=2) # minimize over R2* candidates
 
 
-def modulation_vectors(nB0, N):
+def phi_estimation_matrix(null_proj, N):
+    return np.einsum('rbkn,rbkj->rbnj', null_proj[..., :N, :N], null_proj[..., N:, :N])
+
+
+def modulation_vectors(nB0, N, realEstimates=False):
     B = np.zeros((nB0, N, N), dtype=complex)
     b = np.arange(nB0)[:, None]
     omega = 2.0 * np.pi * b / nB0
     n = np.arange(N)[None, :]
     B[b, n, n] = np.exp(1j * n * omega)
-    return B
+    if not realEstimates:
+        return B
+    Br = np.zeros((nB0, 2*N, 2*N), dtype=complex)
+    Br[:, :N, :N] = B
+    Br[:, N:, N:] = B.conj()
+    return Br
 
 
 def model_matrix(dPar, mPar, R2):
@@ -249,19 +285,21 @@ def model_matrix(dPar, mPar, R2):
     omega = 2.0 * np.pi * GYRO * dPar.B0 * (mPar.CS - mPar.CS[0])
     exponentials = np.exp((1j * omega[None, None, :] - R2) * t[:, None, None] + R2 * dPar.t1)
     A = np.sum(mPar.alpha[None, :, :] * exponentials, axis=2)
+    if mPar.realEstimates:
+        A = np.concat((A, A.conj()), axis=0) # Berglund et al. 2020, eq. 3
     return A
 
 
 def pseudoinverse_and_projection_matrices(dPar, aPar, mPar):
-    B = modulation_vectors(aPar.nB0, dPar.N) # shape: (nB0, N, N)
-    pinv = np.empty(shape=(aPar.nR2, aPar.nB0, mPar.M, dPar.N), dtype=complex)
-    null_proj = np.empty(shape=(aPar.nR2, aPar.nB0, dPar.N, dPar.N), dtype=complex)
+    B = modulation_vectors(aPar.nB0, dPar.N, mPar.realEstimates) # shape: (nB0, N, N), 2N if real-valued estimates
+    pinv = np.empty(shape=(aPar.nR2, aPar.nB0, mPar.M, B.shape[1]), dtype=complex)
+    null_proj = np.empty(shape=(aPar.nR2, aPar.nB0, B.shape[1], B.shape[1]), dtype=complex)
     
     for r in range(aPar.nR2):
         R2 = r * aPar.R2step
         A = model_matrix(dPar, mPar, R2)
         Ap = np.linalg.pinv(A)
-        proj = np.eye(dPar.N) - np.dot(A, Ap) # Null space projection matrix for A
+        proj = np.eye(A.shape[0]) - np.dot(A, Ap) # Null space projection matrix for A
         null_proj[r] = np.einsum('bni,ij,bjk->bnk', B, proj, B.conj())
         pinv[r] = np.einsum('ij,bjk->bik', Ap, B.conj())
     return pinv, null_proj
@@ -269,15 +307,13 @@ def pseudoinverse_and_projection_matrices(dPar, aPar, mPar):
 
 def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
 
-    if mPar.realEstimates:
-        raise NotImplementedError('Real-valued estimates not yet implemented.')
-
     shape = dPar.data.shape[1:]
     Y = dPar.data.reshape(dPar.N, -1)
     scale = np.linalg.norm(Y)**2
     Y /= scale # To avoid overflow
 
     pinv, null_proj = pseudoinverse_and_projection_matrices(dPar, aPar, mPar)
+    D = phi_estimation_matrix(null_proj, dPar.N) if mPar.realEstimates else None
 
     # For B0 index -> off-resonance in ppm
     B0step = 1.0/aPar.nB0/np.abs(dPar.dt)/GYRO/dPar.B0
@@ -287,7 +323,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             V.append(min(b**2, (b-aPar.nB0)**2))
         V = np.array(V)
 
-        J = B0_residuals(Y, null_proj, aPar.iR2cand)
+        J = B0_residuals(Y, null_proj, aPar.iR2cand, D)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
             offresPenalty *= getMeanEnergy(Y)
@@ -301,11 +337,11 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     if R2map is not None:
         R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
     elif (aPar.nR2 > 1):
-        R2 = np.argmin(R2_residuals(Y, dB0, null_proj, aPar.nB0), axis=0) # brute force minimization
+        R2 = np.argmin(R2_residuals(Y, dB0, null_proj, aPar.nB0, D), axis=0) # brute force minimization
     else:
         R2 = np.zeros(np.prod(shape), dtype=int)
 
-    rho = estimate_rho(Y, pinv, R2, dB0 % aPar.nB0).reshape(mPar.M, *shape) * scale
+    rho = estimate_rho(Y, pinv, R2, dB0 % aPar.nB0, D).reshape(mPar.M, *shape) * scale
     B0map = dB0.reshape(shape) * B0step
     R2map = R2.reshape(shape) * aPar.R2step
 
