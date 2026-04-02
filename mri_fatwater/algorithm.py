@@ -259,16 +259,13 @@ def get_B0_residuals(Y, C, nB0, iR2cand, D=None, scale=1):
     return J
 
 
-# Construct modulation vectors for each B0 value
-def modulationVectors(nB0, N):
-    B, Bh = [], []
-    for b in range(nB0):
-        omega = 2.*np.pi*b/nB0
-        B.append(np.eye(N)+0j*np.eye(N))
-        for n in range(N):
-            B[b][n, n] = np.exp(complex(0., n*omega))
-        Bh.append(B[b].conj())
-    return B, Bh
+def modulation_vectors(nB0, N):
+    B = np.zeros((nB0, N, N), dtype=complex)
+    b = np.arange(nB0)[:, None]
+    omega = 2.0 * np.pi * b / nB0
+    n = np.arange(N)[None, :]
+    B[b, n, n] = np.exp(1j * n * omega)
+    return B
 
 
 # Construct matrix RA
@@ -314,8 +311,9 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     shape = dPar.data.shape[1:]
 
     # Prepare matrices
-    # Off-resonance modulation vectors (one for each off-resonance value)
-    B, Bh = modulationVectors(aPar.nB0, dPar.N)
+    # Off-resonance modulation vectors, shape: (nB0, N, N)
+    B = modulation_vectors(aPar.nB0, dPar.N)
+    Bh = B.conj()
     RA, RAp, C, Qp = [], [], [], []
     D = None
     if mPar.realEstimates:
@@ -327,22 +325,22 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
             D.append([])
             Dtmp = getDtmp(RA[r])
             for b in range(aPar.nB0):
-                D[r].append(np.dot(B[b].conj(), np.dot(Dtmp, Bh[b])))
+                D[r].append(np.dot(B[b,:,:].conj(), np.dot(Dtmp, Bh[b,:,:])))
             RA[r] = np.concatenate((np.real(RA[r]), np.imag(RA[r])))
         RAp.append(np.linalg.pinv(RA[r]))
 
     if mPar.realEstimates:
         for b in range(aPar.nB0):
-            B[b] = realify(B[b])
-            Bh[b] = realify(Bh[b])
+            B[b,:,:] = realify(B[b,:,:])
+            Bh[b,:,:] = realify(Bh[b,:,:])
     for r in range(aPar.nR2):
         C.append([])
         Qp.append([])
         # Null space projection matrix
         proj = np.eye(dPar.N*(1+mPar.realEstimates))-np.dot(RA[r], RAp[r])
         for b in range(aPar.nB0):
-            C[r].append(np.dot(np.dot(B[b], proj), Bh[b]))
-            Qp[r].append(np.dot(RAp[r], Bh[b]))
+            C[r].append(np.dot(np.dot(B[b], proj), Bh[b,:,:]))
+            Qp[r].append(np.dot(RAp[r], Bh[b,:,:]))
 
     # For B0 index -> off-resonance in ppm
     B0step = 1.0/aPar.nB0/np.abs(dPar.dt)/GYRO/dPar.B0
