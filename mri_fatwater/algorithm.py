@@ -213,25 +213,32 @@ def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, of
     return dB0
 
 
+# Get mean square signal magnitude within foreground
+def getMeanEnergy(Y):
+    energy = np.linalg.norm(Y, axis=0)**2
+    thres = threshold_otsu(energy)
+    return np.mean(energy[energy >= thres])
+
+
 # Calculate LS error J as function of R2*
-def get_R2_residuals(Y, dB0, C, nB0, nR2):
+def get_R2_residuals(Y, dB0, null_proj, nB0, nR2):
     dB0_wrapped = dB0 % nB0
     J = np.zeros(shape=(nR2, *Y.shape[1:]))
     for b in range(nB0):
         for r in range(nR2):
             y = Y[:, dB0_wrapped == b]
-            J[r, dB0_wrapped == b] = np.linalg.norm(np.tensordot(C[r][b], y, axes=(1,0)), axis=0)**2
+            J[r, dB0_wrapped == b] = np.linalg.norm(np.tensordot(null_proj[r][b], y, axes=(1,0)), axis=0)**2
     return J
 
 
 # Calculate LS error J as function of B0
-def get_B0_residuals(Y, C, nB0, iR2cand, scale=1):
+def get_B0_residuals(Y, null_proj, nB0, iR2cand, scale=1):
     num_voxels = Y.shape[1]
     J = np.zeros(shape=(nB0, num_voxels, len(iR2cand)))
     y = Y
     for r in range(len(iR2cand)):
         for b in range(nB0):
-            J[b, :, r] = np.linalg.norm(np.tensordot(C[iR2cand[r]][b], y*scale, axes=(1,0)), axis=0)**2
+            J[b, :, r] = np.linalg.norm(np.tensordot(null_proj[iR2cand[r]][b], y*scale, axes=(1,0)), axis=0)**2
     J = np.min(J, axis=-1) # minimum over R2* candidates
     return J
 
@@ -258,14 +265,21 @@ def modelMatrix(dPar, mPar, R2):
     return RA
 
 
-# Get mean square signal magnitude within foreground
-def getMeanEnergy(Y):
-    energy = np.linalg.norm(Y, axis=0)**2
-    thres = threshold_otsu(energy)
-    return np.mean(energy[energy >= thres])
+def pseudoinverse_and_projection_matrices(dPar, aPar, mPar):
+    B = modulation_vectors(aPar.nB0, dPar.N) # shape: (nB0, N, N)
+    pinv = np.empty(shape=(aPar.nR2, aPar.nB0, mPar.M, dPar.N), dtype=complex)
+    null_proj = np.empty(shape=(aPar.nR2, aPar.nB0, dPar.N, dPar.N), dtype=complex)
+    
+    for r in range(aPar.nR2):
+        R2 = r * aPar.R2step
+        A = modelMatrix(dPar, mPar, R2)
+        Ap = np.linalg.pinv(A)
+        proj = np.eye(dPar.N) - np.dot(A, Ap) # Null space projection matrix for A
+        null_proj[r] = np.einsum('bni,ij,bjk->bnk', B, proj, B.conj())
+        pinv[r] = np.einsum('ij,bjk->bik', Ap, B.conj())
+    return pinv, null_proj
 
 
-# Perform the actual reconstruction
 def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
 
     if mPar.realEstimates:
@@ -274,25 +288,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     Y = dPar.data.reshape(dPar.N, -1)
     shape = dPar.data.shape[1:]
 
-    # Prepare matrices
-    # Off-resonance modulation vectors, shape: (nB0, N, N)
-    B = modulation_vectors(aPar.nB0, dPar.N)
-    Bh = B.conj()
-    RA, RAp, C, Qp = [], [], [], []
-    
-    for r in range(aPar.nR2):
-        R2 = r*aPar.R2step
-        RA.append(modelMatrix(dPar, mPar, R2))
-        RAp.append(np.linalg.pinv(RA[r]))
-
-    for r in range(aPar.nR2):
-        C.append([])
-        Qp.append([])
-        # Null space projection matrix
-        proj = np.eye(dPar.N)-np.dot(RA[r], RAp[r])
-        for b in range(aPar.nB0):
-            C[r].append(np.dot(np.dot(B[b], proj), Bh[b,:,:]))
-            Qp[r].append(np.dot(RAp[r], Bh[b,:,:]))
+    pinv, null_proj = pseudoinverse_and_projection_matrices(dPar, aPar, mPar)
 
     # For B0 index -> off-resonance in ppm
     B0step = 1.0/aPar.nB0/np.abs(dPar.dt)/GYRO/dPar.B0
@@ -303,7 +299,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         V = np.array(V)
 
         scale = 1 / np.linalg.norm(Y)**2 # To avoid overflow
-        J = get_B0_residuals(Y.reshape(dPar.N, -1), C, aPar.nB0, aPar.iR2cand, scale)
+        J = get_B0_residuals(Y.reshape(dPar.N, -1), null_proj, aPar.nB0, aPar.iR2cand, scale)
         offresPenalty = aPar.offresPenalty
         if aPar.offresPenalty > 0:
             offresPenalty *= getMeanEnergy(Y * scale)
@@ -317,7 +313,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     if R2map is not None:
         R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
     elif (aPar.nR2 > 1):
-        J = get_R2_residuals(Y, dB0, C, aPar.nB0, aPar.nR2)
+        J = get_R2_residuals(Y, dB0, null_proj, aPar.nB0, aPar.nR2)
         R2 = np.argmin(J, axis=0) # brute force minimization
     else:
         R2 = np.zeros(np.prod(shape), dtype=int)
@@ -328,7 +324,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         for b in range(aPar.nB0):
             vxls = ((dB0 % aPar.nB0) == b) * (R2 == r)
             y = Y[:, vxls]
-            rho[:, vxls] = np.dot(Qp[r][b], y)
+            rho[:, vxls] = np.dot(pinv[r][b], y)
 
     rho = rho.reshape(mPar.M, *shape)
     B0map = dB0.reshape(shape) * B0step
