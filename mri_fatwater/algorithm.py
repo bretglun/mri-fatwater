@@ -220,6 +220,10 @@ def getMeanEnergy(Y):
     return np.mean(energy[energy >= thres])
 
 
+def estimate_rho(Y, pinv, R2, dB0):
+    return np.einsum('vmn,nv->mv', pinv[R2, dB0], Y)
+
+
 # Calculate LS error as function of R2*, shape: (nR2, num_voxels)
 def R2_residuals(Y, dB0, null_proj, nB0):
     return np.sum(np.abs(np.einsum('rvnm,mv->rvn', null_proj[:, dB0 % nB0], Y))**2, axis=2)
@@ -301,10 +305,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     else:
         R2 = np.zeros(np.prod(shape), dtype=int)
 
-    # Find least squares solution given dB0 and R2
-    rho = np.einsum('vmn,nv->mv', pinv[R2, dB0 % aPar.nB0], Y)
-
-    rho = rho.reshape(mPar.M, *shape) * scale
+    rho = estimate_rho(Y, pinv, R2, dB0 % aPar.nB0).reshape(mPar.M, *shape) * scale
     B0map = dB0.reshape(shape) * B0step
     R2map = R2.reshape(shape) * aPar.R2step
 
