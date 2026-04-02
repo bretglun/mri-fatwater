@@ -82,10 +82,9 @@ def find_minima(J, num_minima=1):
     minima_sorted = minima[sorting]
     voxels_sorted = voxels[sorting]
     unique_voxels, unique_indices, counts = np.unique(voxels_sorted, return_index=True, return_counts=True)
-    if len(unique_voxels) != J.shape[1]:
-        raise ValueError(f'Not all voxels have a local minimum. Found minima for {len(unique_voxels)} out of {J.shape[1]} voxels.')
+    minima_array = np.zeros((num_minima, J.shape[1]), dtype=int)
     # Fill resulting array with smallest minimum and then record larger minima if available:
-    minima_array = np.tile(minima_sorted[unique_indices], (num_minima, 1)) # shape (num_minima, num_voxels)
+    minima_array[:, unique_voxels] = np.tile(minima_sorted[unique_indices], (num_minima, 1))
     for k in range(1, num_minima):
         minima_array[k, unique_voxels[counts > k]] = minima_sorted[unique_indices[counts > k] + k]
     return minima_array
