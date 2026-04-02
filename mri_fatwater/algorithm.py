@@ -314,12 +314,7 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
         R2 = np.zeros(np.prod(shape), dtype=int)
 
     # Find least squares solution given dB0 and R2
-    rho = np.zeros(shape=(mPar.M, np.prod(shape)), dtype=complex)
-    for r in range(aPar.nR2):
-        for b in range(aPar.nB0):
-            vxls = ((dB0 % aPar.nB0) == b) * (R2 == r)
-            y = Y[:, vxls]
-            rho[:, vxls] = np.dot(pinv[r][b], y)
+    rho = np.einsum('vmn,nv->mv', pinv[R2, dB0 % aPar.nB0], Y, optimize=True)
 
     rho = rho.reshape(mPar.M, *shape)
     B0map = dB0.reshape(shape) * B0step
