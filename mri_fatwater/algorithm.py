@@ -252,17 +252,12 @@ def modulation_vectors(nB0, N):
     return B
 
 
-# Construct matrix RA
-def modelMatrix(dPar, mPar, R2):
-    RA = np.zeros(shape=(dPar.N, mPar.M), dtype=complex)
-    for n in range(dPar.N):
-        t = dPar.t1 + n * dPar.dt
-        for m in range(mPar.M): # Loop over components/species
-            for p in range(mPar.P):  # Loop over all resonances
-                # Chemical shift between water and peak m (in ppm)
-                omega = 2. * np.pi * GYRO * dPar.B0 * (mPar.CS[p] - mPar.CS[0])
-                RA[n, m] += mPar.alpha[m][p]*np.exp(complex(-(t-dPar.t1)*R2, t*omega))
-    return RA
+def model_matrix(dPar, mPar, R2):
+    t = np.arange(dPar.N) * dPar.dt + dPar.t1
+    omega = 2.0 * np.pi * GYRO * dPar.B0 * (mPar.CS - mPar.CS[0])
+    exponentials = np.exp((1j * omega[None, None, :] - R2) * t[:, None, None] + R2 * dPar.t1)
+    A = np.sum(mPar.alpha[None, :, :] * exponentials, axis=2)
+    return A
 
 
 def pseudoinverse_and_projection_matrices(dPar, aPar, mPar):
@@ -272,7 +267,7 @@ def pseudoinverse_and_projection_matrices(dPar, aPar, mPar):
     
     for r in range(aPar.nR2):
         R2 = r * aPar.R2step
-        A = modelMatrix(dPar, mPar, R2)
+        A = model_matrix(dPar, mPar, R2)
         Ap = np.linalg.pinv(A)
         proj = np.eye(dPar.N) - np.dot(A, Ap) # Null space projection matrix for A
         null_proj[r] = np.einsum('bni,ij,bjk->bnk', B, proj, B.conj())
