@@ -108,7 +108,8 @@ def get_downsampling(shape, voxelsize):
         if iso > best_isotropy:
             best_isotropy = iso
             best_factors = factors
-    factors = tuple(best_factors[dim] if dim in dims else 1 for dim in range(len(shape)))
+    factors = np.ones((len(shape)))
+    factors[dims] = best_factors
     coarse_voxelsize = tuple(sz * f for sz, f in zip(voxelsize, factors))
     coarse_shape = tuple(int(np.ceil(n/f)) for n, f in zip(shape, factors))
     return coarse_shape, coarse_voxelsize
