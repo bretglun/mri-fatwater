@@ -1,6 +1,6 @@
 [project]
 name = "mri-fatwater"
-version = "1.1.3"
+version = "1.2.0"
 description = "MRI algorithms for fat-water separation based on chemical shift with B0-correction"
 authors = [
     { name = "Johan Berglund", email = "berglund.hpj@gmail.com" },
