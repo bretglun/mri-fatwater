@@ -240,8 +240,7 @@ def estimate_rho(Y, pinv, R2, dB0, D=None):
     return estimate_rho_realvalued(Y, pinv, R2, dB0, D) # real-valued estimates
 
 
-# Calculate LS error as function of R2*, shape: (nR2, num_voxels)
-def R2_residuals(Y, dB0, null_proj, nB0, D=None):
+def _R2_residuals(Y, dB0, null_proj, nB0, D=None):
     if D is None: # complex-valued estimates
         return np.real(np.einsum('mv,rvmk,kv->rv', Y.conj(), null_proj[:, dB0 % nB0], Y))
     else: # real-valued estimates
@@ -251,8 +250,17 @@ def R2_residuals(Y, dB0, null_proj, nB0, D=None):
         return np.real(np.einsum('mvr,rvmk,kvr->rv', y.conj(), null_proj[:, dB0 % nB0], y))
 
 
-# Calculate LS error J as function of B0, shape: (nB0, num_voxels)
-def B0_residuals(Y, null_proj, iR2cand, D=None):
+# Calculate LS error as function of R2*, shape: (nR2, num_voxels)
+def R2_residuals(Y, dB0, null_proj, nB0, D=None, chunk_size=10**3):
+    nR2, num_voxels = null_proj.shape[0], Y.shape[1]
+    residual = np.empty((nR2, num_voxels), dtype=np.float32)
+    for start in range(0, num_voxels, chunk_size):
+        chunk = slice(start, min(start + chunk_size, num_voxels))
+        residual[:, chunk] = _R2_residuals(Y[:, chunk], dB0[chunk], null_proj, nB0, D)
+    return residual
+
+
+def _B0_residuals(Y, null_proj, iR2cand, D=None):
     if D is None: # complex-valued estimates
         residuals = np.real(np.einsum('mv,rbmk,kv->bvr', Y.conj(), null_proj[iR2cand, :], Y))
     else: # real-valued estimates
@@ -261,6 +269,16 @@ def B0_residuals(Y, null_proj, iR2cand, D=None):
         y = np.concat((y_demod, y_demod.conj()), axis=0) # Berglund et al. 2020, eq. 7
         residuals = np.real(np.einsum('mvrb,rbmk,kvrb->bvr', y.conj(), null_proj[iR2cand, :], y))
     return np.min(residuals, axis=2) # minimize over R2* candidates
+
+
+# Calculate LS error J as function of B0, shape: (nB0, num_voxels)
+def B0_residuals(Y, null_proj, iR2cand, D=None, chunk_size=10**3):
+    nB0, num_voxels = null_proj.shape[1], Y.shape[1]
+    residual = np.empty((nB0, num_voxels), dtype=np.float32)
+    for start in range(0, num_voxels, chunk_size):
+        chunk = slice(start, min(start + chunk_size, num_voxels))
+        residual[:, chunk] = _B0_residuals(Y[:, chunk], null_proj, iR2cand, D)
+    return residual
 
 
 def phi_estimation_matrix(null_proj, N):
