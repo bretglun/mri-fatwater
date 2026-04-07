@@ -147,7 +147,7 @@ def get_neighbourhood(radius, voxelsize):
     return np.array(neighbours)
 
 
-def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, offresCenter=0):
+def calculate_fieldmap_MRF(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, offresCenter=0):
     A, B = find_minima(J, num_minima=2)
     dB0 = np.array(A)
 
@@ -160,7 +160,7 @@ def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, of
         coarse_shape, coarse_voxelsize = get_downsampling(shape, voxelsize)
         J_coarse = downsample_residual(J, coarse_shape, shape)
         # Recursion:
-        dB0_coarse = calculate_fieldmap(J_coarse, V, replace(aPar, graphcutLevel=aPar.graphcutLevel-1), coarse_shape, coarse_voxelsize, cyclic, offresPenalty, offresCenter)
+        dB0_coarse = calculate_fieldmap_MRF(J_coarse, V, replace(aPar, graphcutLevel=aPar.graphcutLevel-1), coarse_shape, coarse_voxelsize, cyclic, offresPenalty, offresCenter)
         dB0 = upsample_B0(dB0_coarse, coarse_shape, shape)
         print(f'Level {shape}: ')
 
@@ -215,11 +215,22 @@ def calculate_fieldmap(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0, of
     return dB0
 
 
-# Get mean square signal magnitude within foreground
-def getMeanEnergy(Y):
-    energy = np.linalg.norm(Y, axis=0)**2
-    thres = threshold_otsu(energy)
-    return np.mean(energy[energy >= thres])
+def calculate_fieldmap(dPar, aPar, shape, J):
+    match aPar.algorithm:
+        case 'QPBO' | 'ICM':
+            V = np.minimum(np.arange(aPar.nB0), np.arange(aPar.nB0, 0, -1))**2 # Discontinuity costs
+            offresPenalty = aPar.offresPenalty
+            if aPar.offresPenalty > 0:
+                offresPenalty *= mean_foreground_L2norm(J.max(axis=0))
+            iOffresCenter = int(dPar.offresCenter / B0_stepsize(dPar.dt, aPar.nB0, dPar.B0))
+            return calculate_fieldmap_MRF(J, V, aPar, shape, dPar.voxelsize, dPar.cyclic, offresPenalty, iOffresCenter)
+        case _:
+            raise NotImplementedError(f'Unknown algorithm: {aPar.algorithm}')
+
+
+def mean_foreground_L2norm(L2norm):
+    thres = threshold_otsu(L2norm)
+    return np.mean(L2norm[L2norm >= thres])
 
 
 def estimate_phi(Y, D, subscripts='nv,vnk,kv->v'):
@@ -253,14 +264,10 @@ def _R2_residuals(Y, dB0, null_proj, nB0, D=None):
 
 # Calculate LS error as function of R2*, shape: (nR2, num_voxels)
 def R2_residuals(Y, dB0, null_proj, nB0, D=None, chunk_size=10**3):
-    nR2, num_voxels = null_proj.shape[0], Y.shape[1]
-    residual = np.empty((nR2, num_voxels), dtype=np.float32)
-    arglist = []
-    for start in range(0, num_voxels, chunk_size):
-        chunk = slice(start, min(start + chunk_size, num_voxels))
-        arglist.append((Y[:, chunk], dB0[chunk], null_proj, nB0, D))
-    residual = np.concat(Parallel(n_jobs=-1)(delayed(_R2_residuals)(*args) for args in arglist), axis=1)
-    return residual
+    num_voxels = Y.shape[1]
+    chunks = [slice(start, min(start + chunk_size, num_voxels)) for start in range(0, num_voxels, chunk_size)]
+    residuals = Parallel(n_jobs=-1)(delayed(_R2_residuals)(Y[:, chunk], dB0[chunk], null_proj, nB0, D) for chunk in chunks)
+    return np.concat(residuals, axis=1)
 
 
 def _B0_residuals(Y, null_proj, iR2cand, D=None):
@@ -277,12 +284,14 @@ def _B0_residuals(Y, null_proj, iR2cand, D=None):
 # Calculate LS error J as function of B0, shape: (nB0, num_voxels)
 def B0_residuals(Y, null_proj, iR2cand, D=None, chunk_size=10**3):
     num_voxels = Y.shape[1]
-    arglist = []
-    for start in range(0, num_voxels, chunk_size):
-        chunk = slice(start, min(start + chunk_size, num_voxels))
-        arglist.append((Y[:, chunk], null_proj, iR2cand, D))
-    residual = np.concat(Parallel(n_jobs=-1)(delayed(_B0_residuals)(*args) for args in arglist), axis=1)
-    return residual
+    chunks = [slice(start, min(start + chunk_size, num_voxels)) for start in range(0, num_voxels, chunk_size)]
+    residuals = Parallel(n_jobs=-1)(delayed(_B0_residuals)(Y[:, chunk], null_proj, iR2cand, D) for chunk in chunks)
+    return np.concat(residuals, axis=1)
+
+
+# off-resonance stepsize in ppm
+def B0_stepsize(dt, nB0, B0):
+    return 1.0 / abs(dt) / nB0 / B0 / GYRO
 
 
 def phi_estimation_matrix(null_proj, N):
@@ -338,34 +347,24 @@ def core_fatwater_separation(dPar, aPar, mPar, B0map=None, R2map=None):
     pinv, null_proj = pseudoinverse_and_projection_matrices(dPar, aPar, mPar)
     D = phi_estimation_matrix(null_proj, dPar.N) if mPar.realEstimates else None
 
-    # For B0 index -> off-resonance in ppm
-    B0step = 1.0/aPar.nB0/np.abs(dPar.dt)/GYRO/dPar.B0
+    B0_step = B0_stepsize(dPar.dt, aPar.nB0, dPar.B0)
     if aPar.algorithm != 'pass':
-        V = []  # Precalculate discontinuity costs
-        for b in range(aPar.nB0):
-            V.append(min(b**2, (b-aPar.nB0)**2))
-        V = np.array(V)
-
         J = B0_residuals(Y, null_proj, aPar.iR2cand, D)
-        offresPenalty = aPar.offresPenalty
-        if aPar.offresPenalty > 0:
-            offresPenalty *= getMeanEnergy(Y)
-
-        dB0 = calculate_fieldmap(J, V, aPar, shape, dPar.voxelsize, dPar.cyclic, offresPenalty, int(dPar.offresCenter/B0step))
+        dB0 = calculate_fieldmap(dPar, aPar, shape, J)
     elif B0map is None:
         dB0 = np.zeros(np.prod(shape), dtype=int)
     else:
-        dB0 = np.array(B0map.flatten()/B0step, dtype=int)
+        dB0 = np.array(B0map.flatten() / B0_step, dtype=int)
 
     if R2map is not None:
-        R2 = np.array(R2map.flatten()/aPar.R2step, dtype=int)
+        R2 = np.array(R2map.flatten() / aPar.R2step, dtype=int)
     elif (aPar.nR2 > 1):
         R2 = np.argmin(R2_residuals(Y, dB0, null_proj, aPar.nB0, D), axis=0) # brute force minimization
     else:
         R2 = np.zeros(np.prod(shape), dtype=int)
 
     rho = estimate_rho(Y, pinv, R2, dB0 % aPar.nB0, D).reshape(mPar.M, *shape) * scale
-    B0map = dB0.reshape(shape) * B0step
+    B0map = dB0.reshape(shape) * B0_step
     R2map = R2.reshape(shape) * aPar.R2step
 
     return rho, B0map, R2map
