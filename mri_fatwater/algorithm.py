@@ -3,6 +3,7 @@ import numpy as np
 from skimage.filters import threshold_otsu
 from dataclasses import replace
 from itertools import product
+from joblib import Parallel, delayed
 from .constants import GYRO
 
 
@@ -254,9 +255,11 @@ def _R2_residuals(Y, dB0, null_proj, nB0, D=None):
 def R2_residuals(Y, dB0, null_proj, nB0, D=None, chunk_size=10**3):
     nR2, num_voxels = null_proj.shape[0], Y.shape[1]
     residual = np.empty((nR2, num_voxels), dtype=np.float32)
+    arglist = []
     for start in range(0, num_voxels, chunk_size):
         chunk = slice(start, min(start + chunk_size, num_voxels))
-        residual[:, chunk] = _R2_residuals(Y[:, chunk], dB0[chunk], null_proj, nB0, D)
+        arglist.append((Y[:, chunk], dB0[chunk], null_proj, nB0, D))
+    residual = np.concat(Parallel(n_jobs=-1)(delayed(_R2_residuals)(*args) for args in arglist), axis=1)
     return residual
 
 
@@ -273,11 +276,12 @@ def _B0_residuals(Y, null_proj, iR2cand, D=None):
 
 # Calculate LS error J as function of B0, shape: (nB0, num_voxels)
 def B0_residuals(Y, null_proj, iR2cand, D=None, chunk_size=10**3):
-    nB0, num_voxels = null_proj.shape[1], Y.shape[1]
-    residual = np.empty((nB0, num_voxels), dtype=np.float32)
+    num_voxels = Y.shape[1]
+    arglist = []
     for start in range(0, num_voxels, chunk_size):
         chunk = slice(start, min(start + chunk_size, num_voxels))
-        residual[:, chunk] = _B0_residuals(Y[:, chunk], null_proj, iR2cand, D)
+        arglist.append((Y[:, chunk], null_proj, iR2cand, D))
+    residual = np.concat(Parallel(n_jobs=-1)(delayed(_B0_residuals)(*args) for args in arglist), axis=1)
     return residual
 
 
