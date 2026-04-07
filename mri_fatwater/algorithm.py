@@ -243,23 +243,23 @@ def estimate_rho(Y, pinv, R2, dB0, D=None):
 # Calculate LS error as function of R2*, shape: (nR2, num_voxels)
 def R2_residuals(Y, dB0, null_proj, nB0, D=None):
     if D is None: # complex-valued estimates
-        residual_vectors = np.einsum('rvnm,mv->rvn', null_proj[:, dB0 % nB0], Y)
+        return np.real(np.einsum('mv,rvmk,kv->rv', Y.conj(), null_proj[:, dB0 % nB0], Y))
     else: # real-valued estimates
         phi = estimate_phi(Y, D[:, dB0], 'nv,rvnk,kv->vr') # shape: (num_voxels, nR2)
-        y = np.einsum('nv,vr->nvr', Y, np.exp(-1j * phi)) # demodulate phi
-        residual_vectors = np.einsum('rvnm,mvr->rvn', null_proj[:, dB0 % nB0], np.concat((y, y.conj()))) # Berglund et al. 2020, eq. 7
-    return np.sum(np.abs(residual_vectors)**2, axis=2)
+        y_demod = np.einsum('nv,vr->nvr', Y, np.exp(-1j * phi)) # demodulate phi
+        y = np.concat((y_demod, y_demod.conj()), axis=0) # Berglund et al. 2020, eq. 7
+        return np.real(np.einsum('mvr,rvmk,kvr->rv', y.conj(), null_proj[:, dB0 % nB0], y))
 
 
 # Calculate LS error J as function of B0, shape: (nB0, num_voxels)
 def B0_residuals(Y, null_proj, iR2cand, D=None):
     if D is None: # complex-valued estimates
-        residual_vectors = np.einsum('rbnm,mv->bvnr', null_proj[iR2cand, :], Y)
+        residuals = np.real(np.einsum('mv,rbmk,kv->bvr', Y.conj(), null_proj[iR2cand, :], Y))
     else: # real-valued estimates
         phi = estimate_phi(Y, D[iR2cand], 'nv,rbnk,kv->vrb') # shape: (num_voxels, nR2cand, nB0)
-        y = np.einsum('nv,vrb->nvrb', Y, np.exp(-1j * phi)) # demodulate phi
-        residual_vectors = np.einsum('rbnm,mvrb->bvnr', null_proj[iR2cand, :], np.concat((y, y.conj()))) # Berglund et al. 2020, eq. 7
-    residuals = np.sum(np.abs(residual_vectors)**2, axis=2)
+        y_demod = np.einsum('nv,vrb->nvrb', Y, np.exp(-1j * phi)) # demodulate phi
+        y = np.concat((y_demod, y_demod.conj()), axis=0) # Berglund et al. 2020, eq. 7
+        residuals = np.real(np.einsum('mvrb,rbmk,kvrb->bvr', y.conj(), null_proj[iR2cand, :], y))
     return np.min(residuals, axis=2) # minimize over R2* candidates
 
 
