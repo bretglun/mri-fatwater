@@ -268,14 +268,14 @@ def phi_estimation_matrix(null_proj, N):
 
 
 def modulation_vectors(nB0, N, realEstimates=False):
-    B = np.zeros((nB0, N, N), dtype=complex)
+    B = np.zeros((nB0, N, N), dtype=np.complex64)
     b = np.arange(nB0)[:, None]
     omega = 2.0 * np.pi * b / nB0
     n = np.arange(N)[None, :]
     B[b, n, n] = np.exp(1j * n * omega)
     if not realEstimates:
         return B
-    Br = np.zeros((nB0, 2*N, 2*N), dtype=complex)
+    Br = np.zeros((nB0, 2*N, 2*N), dtype=np.complex64)
     Br[:, :N, :N] = B
     Br[:, N:, N:] = B.conj()
     return Br
@@ -285,7 +285,7 @@ def model_matrix(dPar, mPar, R2):
     t = np.arange(dPar.N) * dPar.dt + dPar.t1
     omega = 2.0 * np.pi * GYRO * dPar.B0 * (mPar.CS - mPar.CS[0])
     exponentials = np.exp((1j * omega[None, None, :] - R2) * t[:, None, None] + R2 * dPar.t1)
-    A = np.sum(mPar.alpha[None, :, :] * exponentials, axis=2)
+    A = np.sum(mPar.alpha[None, :, :] * exponentials, axis=2, dtype=np.complex64)
     if mPar.realEstimates:
         A = np.concat((A, A.conj()), axis=0) # Berglund et al. 2020, eq. 3
     return A
@@ -293,8 +293,8 @@ def model_matrix(dPar, mPar, R2):
 
 def pseudoinverse_and_projection_matrices(dPar, aPar, mPar):
     B = modulation_vectors(aPar.nB0, dPar.N, mPar.realEstimates) # shape: (nB0, N, N), 2N if real-valued estimates
-    pinv = np.empty(shape=(aPar.nR2, aPar.nB0, mPar.M, B.shape[1]), dtype=complex)
-    null_proj = np.empty(shape=(aPar.nR2, aPar.nB0, B.shape[1], B.shape[1]), dtype=complex)
+    pinv = np.empty(shape=(aPar.nR2, aPar.nB0, mPar.M, B.shape[1]), dtype=np.complex64)
+    null_proj = np.empty(shape=(aPar.nR2, aPar.nB0, B.shape[1], B.shape[1]), dtype=np.complex64)
     
     for r in range(aPar.nR2):
         R2 = r * aPar.R2step
