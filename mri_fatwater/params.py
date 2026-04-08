@@ -154,8 +154,6 @@ class BaseAlgoParams:
         self.R2step = self.R2max/(self.nR2-1) if self.nR2 > 1 else 1. # [sec-1]
         self.iR2cand = np.array(list(set([min(self.nR2-1, int(R2/self.R2step)) for R2 in self.R2cand])))
         
-        self.maxICMupdate = round(self.nB0/10)
-
         if self.output is None:
             self.output = ['wat', 'fat', 'ff', 'B0map']
             if realEstimates:
@@ -174,17 +172,21 @@ class MRFparams(BaseAlgoParams):
     mu: float = 0.1
     offresPenalty: float = 0.
     neighbourhoodRadius: float = 0. # [mm]
+    multiScale: bool = True
     nICMiter: int = 10
+    maxICMupdate: Optional[int] = None
     
     def __init__(self, **overrides):
         super().__init__(**overrides)
+
+        if self.maxICMupdate is None:
+            self.maxICMupdate = int(self.nB0 / 10)
 
 
 @dataclass
 class QPBOparams(MRFparams):
     ALGORITHM_NAME: ClassVar[str] = 'QPBO'
-    multiScale: bool = True
-    graphcutLevel: int = 0
+    graphcutLimit: float = 0.0
 
     def __init__(self, **overrides):
         super().__init__(**overrides)

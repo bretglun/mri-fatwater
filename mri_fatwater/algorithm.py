@@ -160,7 +160,7 @@ def calculate_fieldmap_MRF(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0
         coarse_shape, coarse_voxelsize = get_downsampling(shape, voxelsize)
         J_coarse = downsample_residual(J, coarse_shape, shape)
         # Recursion:
-        dB0_coarse = calculate_fieldmap_MRF(J_coarse, V, replace(aPar, graphcutLevel=aPar.graphcutLevel-1), coarse_shape, coarse_voxelsize, cyclic, offresPenalty, offresCenter)
+        dB0_coarse = calculate_fieldmap_MRF(J_coarse, V, aPar, coarse_shape, coarse_voxelsize, cyclic, offresPenalty, offresCenter)
         dB0 = upsample_B0(dB0_coarse, coarse_shape, shape)
         print(f'Level {shape}: ')
 
@@ -189,9 +189,8 @@ def calculate_fieldmap_MRF(J, V, aPar, shape, voxelsize, cyclic, offresPenalty=0
     D = np.array([J[A, vxls] + OP[A], J[B, vxls] + OP[B]])
     print('DONE')
 
-    # QPBO
-    graphcut = aPar.graphcutLevel <= 0
-    if graphcut:
+    # QPBO graph cut
+    if aPar.algorithm=='QPBO' and aPar.graphcutLimit <= min(voxelsize):
         Vs = np.zeros((4, *ngb_indices.shape), dtype=float)
         for q in range(num_ngb):
             Vs[:, q, :] = np.array(w[q] * [
